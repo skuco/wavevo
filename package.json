@@ -1,0 +1,30 @@
+{
+  "name": "wavevo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "busboy": "latest",
+    "ffmpeg-static": "latest",
+    "ffprobe-static": "latest",
+    "next": "latest",
+    "pngjs": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "wavesurfer.js": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/busboy": "latest",
+    "@types/node": "latest",
+    "@types/pngjs": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "typescript": "latest"
+  }
+}

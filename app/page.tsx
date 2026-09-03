@@ -3,18 +3,28 @@
 import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import type WaveSurfer from "wavesurfer.js";
 import { formatTime } from "@/lib/format";
-import type { ExportSettings, UploadedTrack, VideoFormat } from "@/lib/types";
+import type { ExportSettings, UploadedTrack, VideoFormat, WaveformStyle } from "@/lib/types";
 
 const MAX_FILE_SIZE = 200 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = ["wav", "mp3", "flac"];
 type Theme = "dark" | "light";
-type SaveFileHandle = { createWritable: () => Promise<WritableStream<Uint8Array>> };
 
-const VIDEO_FORMATS: Record<VideoFormat, { label: string; mime: string }> = {
-  mp4: { label: "MP4 · H.264 / AAC", mime: "video/mp4" },
-  webm: { label: "WebM · VP9 / Opus", mime: "video/webm" },
-  mov: { label: "MOV · H.264 / AAC", mime: "video/quicktime" },
+const VIDEO_FORMATS: Record<VideoFormat, { label: string }> = {
+  mp4: { label: "MP4 · H.264 / AAC" },
+  mov: { label: "MOV · H.264 / AAC" },
 };
+
+const WAVEFORM_STYLES: Record<WaveformStyle, string> = {
+  rounded: "Rounded bars",
+  dense: "Dense bars",
+  wave: "Classic wave",
+};
+
+function waveformRenderOptions(style: WaveformStyle) {
+  if (style === "wave") return { barWidth: undefined, barGap: undefined, barRadius: undefined };
+  if (style === "dense") return { barWidth: 2, barGap: 2, barRadius: 2 };
+  return { barWidth: 3, barGap: 3, barRadius: 3 };
+}
 
 function safeExportName(value: string) {
   return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/[. ]+$/g, "").trim() || "wavevo-export";
@@ -81,7 +91,7 @@ export default function Home() {
       <section className="hero">
         <div className="eyebrow"><span /> Waveform studio</div>
         <h1>Let your sound<br /><em>take shape.</em></h1>
-        <p>Turn any track into a clean, shareable waveform video—without a timeline editor.</p>
+        <p>Turn any track into a clean, shareable waveform video.</p>
 
         <label
           className={`dropzone ${dragging ? "is-dragging" : ""}`}
@@ -122,12 +132,10 @@ function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [counting, setCounting] = useState<number | null>(null);
-  const [settings, setSettings] = useState<ExportSettings>({ color: "#ff5c35", showProgress: true, countdown: 3 });
+  const [settings, setSettings] = useState<ExportSettings>({ color: "#ff5c35", showProgress: true, countdown: 3, waveformStyle: "rounded" });
   const [exporting, setExporting] = useState(false);
   const [exportUrl, setExportUrl] = useState("");
-  const [exportName, setExportName] = useState(`${track.name.replace(/\.[^.]+$/, "")}-wavevo`);
   const [videoFormat, setVideoFormat] = useState<VideoFormat>("mp4");
-  const [saveStatus, setSaveStatus] = useState("");
   const [error, setError] = useState("");
   const timelineScale = track.duration <= 60
     ? { tick: 1, label: 10 }
@@ -155,9 +163,7 @@ function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack
         cursorColor: theme === "dark" ? "#f4f1e9" : "#17191d",
         cursorWidth: 2,
         height: 250,
-        barWidth: 3,
-        barGap: 3,
-        barRadius: 3,
+        ...waveformRenderOptions(settings.waveformStyle),
         normalize: false,
         plugins: [Timeline.create({
           height: 38,
@@ -196,14 +202,14 @@ function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack
       waveColor: settings.color,
       progressColor: settings.showProgress ? (theme === "dark" ? "#f4f1e9" : "#17191d") : settings.color,
       cursorColor: theme === "dark" ? "#f4f1e9" : "#17191d",
+      ...waveformRenderOptions(settings.waveformStyle),
     });
     setExportUrl("");
-  }, [settings.color, settings.showProgress, settings.countdown, theme]);
+  }, [settings.color, settings.showProgress, settings.countdown, settings.waveformStyle, theme]);
 
   useEffect(() => {
     setExportUrl("");
-    setSaveStatus("");
-  }, [exportName, videoFormat]);
+  }, [videoFormat]);
 
   const togglePlayback = () => {
     const wave = waveSurferRef.current;
@@ -245,31 +251,9 @@ function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack
   };
 
   const createExport = async () => {
-    const fileName = `${safeExportName(exportName)}.${videoFormat}`;
-    const pickerWindow = window as Window & {
-      showSaveFilePicker?: (options: {
-        suggestedName: string;
-        types: Array<{ description: string; accept: Record<string, string[]> }>;
-      }) => Promise<SaveFileHandle>;
-    };
-    let fileHandle: SaveFileHandle | null = null;
-    if (pickerWindow.showSaveFilePicker) {
-      try {
-        fileHandle = await pickerWindow.showSaveFilePicker({
-          suggestedName: fileName,
-          types: [{ description: VIDEO_FORMATS[videoFormat].label, accept: { [VIDEO_FORMATS[videoFormat].mime]: [`.${videoFormat}`] } }],
-        });
-      } catch (caught) {
-        if (caught instanceof DOMException && caught.name === "AbortError") return;
-        setError("The save location could not be opened.");
-        return;
-      }
-    }
-
     setExporting(true);
     setError("");
     setExportUrl("");
-    setSaveStatus("");
     try {
       const response = await fetch("/api/exports", {
         method: "POST",
@@ -279,19 +263,6 @@ function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Export failed.");
       setExportUrl(payload.downloadUrl);
-      if (fileHandle) {
-        const download = await fetch(payload.downloadUrl);
-        if (!download.ok || !download.body) throw new Error("The rendered video could not be saved.");
-        const writable = await fileHandle.createWritable();
-        await download.body.pipeTo(writable);
-        setSaveStatus(`Saved ${fileName}`);
-      } else {
-        const anchor = document.createElement("a");
-        anchor.href = payload.downloadUrl;
-        anchor.download = fileName;
-        anchor.click();
-        setSaveStatus(`Downloaded ${fileName}`);
-      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Export failed.");
     } finally {
@@ -342,6 +313,12 @@ function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack
               <div className="color-control"><input id="wave-color" type="color" value={settings.color} onChange={(e) => setSettings({ ...settings, color: e.target.value })} /><code>{settings.color.toUpperCase()}</code></div>
             </div>
             <div className="control-row">
+              <div><label htmlFor="wave-style">Waveform style</label><p>Choose the shape of the visualization</p></div>
+              <select id="wave-style" value={settings.waveformStyle} onChange={(event) => setSettings({ ...settings, waveformStyle: event.target.value as WaveformStyle })}>
+                {(Object.entries(WAVEFORM_STYLES) as Array<[WaveformStyle, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </div>
+            <div className="control-row">
               <div><label htmlFor="progress">Playback progress</label><p>Highlight the played section</p></div>
               <button id="progress" role="switch" aria-checked={settings.showProgress} className={`switch ${settings.showProgress ? "on" : ""}`} onClick={() => setSettings({ ...settings, showProgress: !settings.showProgress })}><span /></button>
             </div>
@@ -362,21 +339,15 @@ function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack
           <div className="export-copy"><span className="section-label">Export</span><h2>Ready to make it move?</h2><p>{VIDEO_FORMATS[videoFormat].label} · 1080p · with audio</p></div>
           <div className="export-options">
             <label className="export-field">
-              <span>File name</span>
-              <div className="filename-input"><input value={exportName} maxLength={120} onChange={(event) => setExportName(event.target.value)} /><code>.{videoFormat}</code></div>
-            </label>
-            <label className="export-field">
               <span>Video type</span>
               <select value={videoFormat} onChange={(event) => setVideoFormat(event.target.value as VideoFormat)}>
                 {(Object.entries(VIDEO_FORMATS) as Array<[VideoFormat, (typeof VIDEO_FORMATS)[VideoFormat]]>).map(([value, option]) => <option key={value} value={value}>{option.label}</option>)}
               </select>
             </label>
-            <p className="save-location-note">You’ll choose the save location when export starts.</p>
           </div>
           <div className="export-actions">
-            {exportUrl && <a className="download-button" href={exportUrl} download={`${safeExportName(exportName)}.${videoFormat}`}>Download again</a>}
-            <button className="export-button" onClick={() => void createExport()} disabled={exporting}>{exporting ? "Rendering…" : "Choose location & export →"}</button>
-            {saveStatus && <span className="save-status">✓ {saveStatus}</span>}
+            <button className="export-button" onClick={() => void createExport()} disabled={exporting}>{exporting ? "Rendering…" : exportUrl ? "Render again" : "Render video"}</button>
+            {exportUrl && <a className="download-button" href={exportUrl} download={`${safeExportName(`${track.name.replace(/\.[^.]+$/, "")}-wavevo`)}.${videoFormat}`}>Download</a>}
           </div>
         </section>
         {error && <p className="error-message" role="alert">{error}</p>}

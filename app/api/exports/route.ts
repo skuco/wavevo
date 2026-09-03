@@ -13,7 +13,8 @@ const requestSchema = z.object({
   color: z.string().regex(/^#[0-9a-f]{6}$/i),
   showProgress: z.boolean(),
   countdown: z.union([z.literal(0), z.literal(3), z.literal(5), z.literal(10)]),
-  format: z.enum(["mp4", "webm", "mov"]),
+  waveformStyle: z.enum(["rounded", "dense", "wave"]),
+  format: z.enum(["mp4", "mov"]),
 });
 
 export async function POST(request: Request) {
@@ -27,8 +28,8 @@ export async function POST(request: Request) {
     const outputPath = path.join(directory, `export.${settings.format}`);
     const peaksPath = path.join(directory, "peaks.json");
     await Promise.all([
-      renderWaveformImage(peaksPath, imagePath, settings.color),
-      renderWaveformImage(peaksPath, playedImagePath, "#f4f1e9"),
+      renderWaveformImage(peaksPath, imagePath, settings.color, settings.waveformStyle),
+      renderWaveformImage(peaksPath, playedImagePath, "#f4f1e9", settings.waveformStyle),
     ]);
     await createVideo(path.join(directory, "playback.mp3"), imagePath, playedImagePath, outputPath, metadata.duration, settings, settings.format);
     return Response.json({ downloadUrl: `/api/exports/${id}?format=${settings.format}` });

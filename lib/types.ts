@@ -6,10 +6,13 @@ export type UploadedTrack = {
   audioUrl: string;
 };
 
+export type WaveformStyle = "rounded" | "dense" | "wave";
+
 export type ExportSettings = {
   color: string;
   showProgress: boolean;
   countdown: 0 | 3 | 5 | 10;
+  waveformStyle: WaveformStyle;
 };
 
-export type VideoFormat = "mp4" | "webm" | "mov";
+export type VideoFormat = "mp4" | "mov";

@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { assertUploadId, uploadDirectory } from "@/lib/server/paths";
@@ -10,7 +10,6 @@ export const dynamic = "force-dynamic";
 
 const formats: Record<VideoFormat, string> = {
   mp4: "video/mp4",
-  webm: "video/webm",
   mov: "video/quicktime",
 };
 
@@ -20,13 +19,23 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const requestedFormat = new URL(request.url).searchParams.get("format") || "mp4";
     if (!(requestedFormat in formats)) return Response.json({ error: "Unknown video format." }, { status: 400 });
     const format = requestedFormat as VideoFormat;
-    const filePath = path.join(uploadDirectory(assertUploadId(id)), `export.${format}`);
-    const details = await stat(filePath);
+    const directory = uploadDirectory(assertUploadId(id));
+    const filePath = path.join(directory, `export.${format}`);
+    const [details, metadataText] = await Promise.all([
+      stat(filePath),
+      readFile(path.join(directory, "metadata.json"), "utf8"),
+    ]);
+    const metadata = JSON.parse(metadataText) as { name?: string };
+    const originalName = metadata.name || "wavevo";
+    const originalBase = path.basename(originalName, path.extname(originalName));
+    const safeBase = originalBase.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/[. ]+$/g, "").trim() || "wavevo";
+    const downloadName = `${safeBase}-wavevo.${format}`;
+    const asciiFallback = downloadName.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "-");
     return new Response(Readable.toWeb(createReadStream(filePath)) as ReadableStream, {
       headers: {
         "Content-Type": formats[format],
         "Content-Length": String(details.size),
-        "Content-Disposition": `attachment; filename="wavevo-${id.slice(0, 8)}.${format}"`,
+        "Content-Disposition": `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`,
       },
     });
   } catch {

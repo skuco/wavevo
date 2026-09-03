@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
 import ffprobeStatic from "ffprobe-static";
 import { PNG } from "pngjs";
-import type { ExportSettings, VideoFormat } from "@/lib/types";
+import type { ExportSettings, VideoFormat, WaveformStyle } from "@/lib/types";
 import { runProcess } from "./process";
 
 const PEAK_COUNT = 2400;
@@ -85,7 +85,7 @@ function parseHex(color: string) {
   return [Number.parseInt(value.slice(0, 2), 16), Number.parseInt(value.slice(2, 4), 16), Number.parseInt(value.slice(4, 6), 16)];
 }
 
-export async function renderWaveformImage(peaksPath: string, outputPath: string, color: string) {
+export async function renderWaveformImage(peaksPath: string, outputPath: string, color: string, style: WaveformStyle) {
   const peaks = JSON.parse(await readFile(peaksPath, "utf8")) as number[];
   const width = VIDEO_WIDTH;
   const height = VIDEO_HEIGHT;
@@ -107,23 +107,27 @@ export async function renderWaveformImage(peaksPath: string, outputPath: string,
   const usableWidth = width - left * 2;
   const center = Math.floor(height * 0.49);
   const maxHeight = 590;
-  const bars = Math.min(peaks.length, Math.floor(usableWidth / 6));
+  const slotWidth = style === "wave" ? 1 : style === "dense" ? 4 : 6;
+  const fillRatio = style === "wave" ? 1.1 : style === "dense" ? 0.62 : 0.54;
+  const bars = Math.min(peaks.length, Math.floor(usableWidth / slotWidth));
   for (let bar = 0; bar < bars; bar += 1) {
     const sourceStart = Math.floor((bar / bars) * peaks.length);
     const sourceEnd = Math.max(sourceStart + 1, Math.floor(((bar + 1) / bars) * peaks.length));
     let peak = 0;
     for (let source = sourceStart; source < sourceEnd; source += 1) peak = Math.max(peak, peaks[source] || 0);
     const x0 = Math.floor(left + (bar / bars) * usableWidth);
-    const x1 = Math.max(x0 + 2, Math.floor(left + ((bar + 0.54) / bars) * usableWidth));
+    const x1 = Math.max(x0 + (style === "wave" ? 1 : 2), Math.floor(left + ((bar + fillRatio) / bars) * usableWidth));
     const barHeight = Math.max(5, Math.round(peak * maxHeight));
     const y0 = center - Math.floor(barHeight / 2);
     const y1 = center + Math.ceil(barHeight / 2);
-    const radius = Math.max(1, (x1 - x0) / 2);
+    const radius = style === "wave" ? 0 : Math.max(1, (x1 - x0) / 2);
     for (let y = y0; y <= y1; y += 1) {
       for (let x = x0; x <= x1; x += 1) {
-        const capCenterY = y < y0 + radius ? y0 + radius : y > y1 - radius ? y1 - radius : y;
-        const capCenterX = (x0 + x1) / 2;
-        if ((x - capCenterX) ** 2 + (y - capCenterY) ** 2 > radius ** 2) continue;
+        if (radius) {
+          const capCenterY = y < y0 + radius ? y0 + radius : y > y1 - radius ? y1 - radius : y;
+          const capCenterX = (x0 + x1) / 2;
+          if ((x - capCenterX) ** 2 + (y - capCenterY) ** 2 > radius ** 2) continue;
+        }
         const offset = (width * y + x) * 4;
         png.data[offset] = red; png.data[offset + 1] = green; png.data[offset + 2] = blue; png.data[offset + 3] = 255;
       }
@@ -156,9 +160,7 @@ export async function createVideo(inputAudio: string, imagePath: string, playedI
   const audioFilter = settings.countdown
     ? `[2:a]adelay=${settings.countdown * 1000}:all=1[a]`
     : `[2:a]anull[a]`;
-  const encodingArguments = format === "webm"
-    ? ["-c:v", "libvpx-vp9", "-crf", "30", "-b:v", "0", "-deadline", "good", "-cpu-used", "4", "-c:a", "libopus", "-b:a", "160k"]
-    : ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"];
+  const encodingArguments = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"];
   await runProcess(binaryPath(ffmpegPath), [
     "-y", "-v", "error",
     "-loop", "1", "-framerate", "30", "-i", imagePath,

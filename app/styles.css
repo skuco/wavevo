@@ -101,16 +101,10 @@ select { color: var(--paper); background: var(--panel); border: 1px solid var(--
 .export-panel { margin-top: 18px; padding: 30px; border: 1px solid var(--line); display: grid; grid-template-columns: minmax(210px, .8fr) minmax(310px, 1.25fr) auto; gap: 30px; align-items: center; background: linear-gradient(90deg, rgba(255,92,53,.07), transparent 45%); }
 .export-panel h2 { margin: 8px 0 5px; font-size: 24px; }
 .export-panel p { margin: 0; color: var(--muted); font-size: 11px; }
-.export-options { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(170px, 1fr); gap: 12px; }
+.export-options { display: grid; grid-template-columns: minmax(220px, 1fr); gap: 12px; }
 .export-field { display: grid; gap: 7px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.1px; font-size: 9px; }
-.export-field select, .filename-input { height: 40px; width: 100%; }
-.filename-input { display: flex; align-items: center; background: var(--panel); border: 1px solid var(--line); }
-.filename-input input { width: 100%; min-width: 0; padding: 0 0 0 11px; color: var(--paper); background: transparent; border: 0; outline: 0; font-size: 12px; }
-.filename-input:focus-within { border-color: var(--accent); }
-.filename-input code { padding: 0 10px 0 5px; color: var(--muted); text-transform: lowercase; letter-spacing: 0; font-size: 11px; }
-.save-location-note { grid-column: 1 / -1; }
+.export-field select { height: 40px; width: 100%; }
 .export-actions { display: flex; position: relative; flex-direction: column; gap: 8px; }
-.save-status { max-width: 210px; color: var(--muted); font-size: 10px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .export-button, .download-button { min-width: 160px; padding: 15px 20px; border: 0; text-align: center; text-decoration: none; cursor: pointer; font-weight: 800; font-size: 12px; }
 .export-button { background: var(--accent); color: white; }
 .export-button:disabled { opacity: .6; cursor: wait; }
@@ -126,7 +120,6 @@ select { color: var(--paper); background: var(--panel); border: 1px solid var(--
   .restart span { display: none; }
   .export-panel { grid-template-columns: 1fr; align-items: stretch; gap: 24px; }
   .export-options { grid-template-columns: 1fr; }
-  .save-location-note { grid-column: auto; }
   .export-actions { flex-direction: column; }
   .landing-footer { padding-top: 18px; padding-bottom: 18px; align-items: flex-start; flex-direction: column; gap: 10px; }
 }

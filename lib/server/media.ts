@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
 import ffprobeStatic from "ffprobe-static";
 import { PNG } from "pngjs";
-import type { ExportSettings } from "@/lib/types";
+import type { ExportSettings, VideoFormat } from "@/lib/types";
 import { runProcess } from "./process";
 
 const PEAK_COUNT = 2400;
@@ -141,7 +141,7 @@ function countdownFilters(seconds: number, color: string) {
   return `,${filters.join(",")}`;
 }
 
-export async function createVideo(inputAudio: string, imagePath: string, playedImagePath: string, outputPath: string, duration: number, settings: ExportSettings) {
+export async function createVideo(inputAudio: string, imagePath: string, playedImagePath: string, outputPath: string, duration: number, settings: ExportSettings, format: VideoFormat) {
   const totalDuration = duration + settings.countdown;
   const waveformWidth = VIDEO_WIDTH - WAVEFORM_INSET * 2;
   const progress = `max(0,min(1,(T-${settings.countdown})/${duration}))`;
@@ -156,6 +156,9 @@ export async function createVideo(inputAudio: string, imagePath: string, playedI
   const audioFilter = settings.countdown
     ? `[2:a]adelay=${settings.countdown * 1000}:all=1[a]`
     : `[2:a]anull[a]`;
+  const encodingArguments = format === "webm"
+    ? ["-c:v", "libvpx-vp9", "-crf", "30", "-b:v", "0", "-deadline", "good", "-cpu-used", "4", "-c:a", "libopus", "-b:a", "160k"]
+    : ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"];
   await runProcess(binaryPath(ffmpegPath), [
     "-y", "-v", "error",
     "-loop", "1", "-framerate", "30", "-i", imagePath,
@@ -163,7 +166,6 @@ export async function createVideo(inputAudio: string, imagePath: string, playedI
     "-i", inputAudio,
     "-filter_complex", `${videoFilter};${audioFilter}`,
     "-map", "[v]", "-map", "[a]", "-t", totalDuration.toFixed(3),
-    "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
-    "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", outputPath,
+    ...encodingArguments, outputPath,
   ]);
 }

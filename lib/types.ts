@@ -11,3 +11,5 @@ export type ExportSettings = {
   showProgress: boolean;
   countdown: 0 | 3 | 5 | 10;
 };
+
+export type VideoFormat = "mp4" | "webm" | "mov";

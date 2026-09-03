@@ -1,6 +1,6 @@
 # Wavevo
 
-Wavevo is a focused waveform-video studio. Upload a WAV, MP3, or FLAC file, preview and seek through its waveform, customize playback, and export a 1080p H.264 MP4 with audio.
+Wavevo is a focused waveform-video studio. Upload a WAV, MP3, or FLAC file, preview and seek through its waveform, customize playback, and export a 1080p video with audio.
 
 ## PoC features
 
@@ -12,7 +12,8 @@ Wavevo is a focused waveform-video studio. Upload a WAV, MP3, or FLAC file, prev
 - Custom waveform color
 - Optional playback/export progress indicator
 - Optional 3, 5, or 10 second countdown
-- 1920×1080, 30 fps H.264/AAC MP4 export with audio
+- Custom export filename and system save-location picker where supported
+- 1920×1080, 30 fps MP4 or MOV with H.264/AAC, or WebM with VP9/Opus
 
 ## Run locally
 

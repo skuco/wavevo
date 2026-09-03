@@ -3,11 +3,22 @@
 import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import type WaveSurfer from "wavesurfer.js";
 import { formatTime } from "@/lib/format";
-import type { ExportSettings, UploadedTrack } from "@/lib/types";
+import type { ExportSettings, UploadedTrack, VideoFormat } from "@/lib/types";
 
 const MAX_FILE_SIZE = 200 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = ["wav", "mp3", "flac"];
 type Theme = "dark" | "light";
+type SaveFileHandle = { createWritable: () => Promise<WritableStream<Uint8Array>> };
+
+const VIDEO_FORMATS: Record<VideoFormat, { label: string; mime: string }> = {
+  mp4: { label: "MP4 · H.264 / AAC", mime: "video/mp4" },
+  webm: { label: "WebM · VP9 / Opus", mime: "video/webm" },
+  mov: { label: "MOV · H.264 / AAC", mime: "video/quicktime" },
+};
+
+function safeExportName(value: string) {
+  return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/[. ]+$/g, "").trim() || "wavevo-export";
+}
 
 export default function Home() {
   const [track, setTrack] = useState<UploadedTrack | null>(null);
@@ -114,6 +125,9 @@ function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack
   const [settings, setSettings] = useState<ExportSettings>({ color: "#ff5c35", showProgress: true, countdown: 3 });
   const [exporting, setExporting] = useState(false);
   const [exportUrl, setExportUrl] = useState("");
+  const [exportName, setExportName] = useState(`${track.name.replace(/\.[^.]+$/, "")}-wavevo`);
+  const [videoFormat, setVideoFormat] = useState<VideoFormat>("mp4");
+  const [saveStatus, setSaveStatus] = useState("");
   const [error, setError] = useState("");
   const timelineScale = track.duration <= 60
     ? { tick: 1, label: 10 }
@@ -186,6 +200,11 @@ function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack
     setExportUrl("");
   }, [settings.color, settings.showProgress, settings.countdown, theme]);
 
+  useEffect(() => {
+    setExportUrl("");
+    setSaveStatus("");
+  }, [exportName, videoFormat]);
+
   const togglePlayback = () => {
     const wave = waveSurferRef.current;
     if (!wave || !ready) return;
@@ -226,18 +245,53 @@ function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack
   };
 
   const createExport = async () => {
+    const fileName = `${safeExportName(exportName)}.${videoFormat}`;
+    const pickerWindow = window as Window & {
+      showSaveFilePicker?: (options: {
+        suggestedName: string;
+        types: Array<{ description: string; accept: Record<string, string[]> }>;
+      }) => Promise<SaveFileHandle>;
+    };
+    let fileHandle: SaveFileHandle | null = null;
+    if (pickerWindow.showSaveFilePicker) {
+      try {
+        fileHandle = await pickerWindow.showSaveFilePicker({
+          suggestedName: fileName,
+          types: [{ description: VIDEO_FORMATS[videoFormat].label, accept: { [VIDEO_FORMATS[videoFormat].mime]: [`.${videoFormat}`] } }],
+        });
+      } catch (caught) {
+        if (caught instanceof DOMException && caught.name === "AbortError") return;
+        setError("The save location could not be opened.");
+        return;
+      }
+    }
+
     setExporting(true);
     setError("");
     setExportUrl("");
+    setSaveStatus("");
     try {
       const response = await fetch("/api/exports", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ uploadId: track.id, ...settings }),
+        body: JSON.stringify({ uploadId: track.id, ...settings, format: videoFormat }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Export failed.");
       setExportUrl(payload.downloadUrl);
+      if (fileHandle) {
+        const download = await fetch(payload.downloadUrl);
+        if (!download.ok || !download.body) throw new Error("The rendered video could not be saved.");
+        const writable = await fileHandle.createWritable();
+        await download.body.pipeTo(writable);
+        setSaveStatus(`Saved ${fileName}`);
+      } else {
+        const anchor = document.createElement("a");
+        anchor.href = payload.downloadUrl;
+        anchor.download = fileName;
+        anchor.click();
+        setSaveStatus(`Downloaded ${fileName}`);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Export failed.");
     } finally {
@@ -305,10 +359,24 @@ function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack
         </div>
 
         <section className="export-panel">
-          <div><span className="section-label">Export</span><h2>Ready to make it move?</h2><p>MP4 · H.264 · 1080p · with audio</p></div>
+          <div className="export-copy"><span className="section-label">Export</span><h2>Ready to make it move?</h2><p>{VIDEO_FORMATS[videoFormat].label} · 1080p · with audio</p></div>
+          <div className="export-options">
+            <label className="export-field">
+              <span>File name</span>
+              <div className="filename-input"><input value={exportName} maxLength={120} onChange={(event) => setExportName(event.target.value)} /><code>.{videoFormat}</code></div>
+            </label>
+            <label className="export-field">
+              <span>Video type</span>
+              <select value={videoFormat} onChange={(event) => setVideoFormat(event.target.value as VideoFormat)}>
+                {(Object.entries(VIDEO_FORMATS) as Array<[VideoFormat, (typeof VIDEO_FORMATS)[VideoFormat]]>).map(([value, option]) => <option key={value} value={value}>{option.label}</option>)}
+              </select>
+            </label>
+            <p className="save-location-note">You’ll choose the save location when export starts.</p>
+          </div>
           <div className="export-actions">
-            {exportUrl && <a className="download-button" href={exportUrl} download={`${track.name.replace(/\.[^.]+$/, "")}-wavevo.mp4`}>Download video</a>}
-            <button className="export-button" onClick={() => void createExport()} disabled={exporting}>{exporting ? "Rendering…" : "Export video →"}</button>
+            {exportUrl && <a className="download-button" href={exportUrl} download={`${safeExportName(exportName)}.${videoFormat}`}>Download again</a>}
+            <button className="export-button" onClick={() => void createExport()} disabled={exporting}>{exporting ? "Rendering…" : "Choose location & export →"}</button>
+            {saveStatus && <span className="save-status">✓ {saveStatus}</span>}
           </div>
         </section>
         {error && <p className="error-message" role="alert">{error}</p>}
@@ -337,7 +405,7 @@ function AppFooter() {
   return (
     <footer className="landing-footer">
       <span>Wavevo · Audio into motion</span>
-      <span>Designed &amp; built by <a href="https://www.testx.sk" target="_blank" rel="noreferrer">www.testx.sk</a></span>
+      <span>© 2026 · Designed &amp; built by <a href="https://www.testx.sk" target="_blank" rel="noreferrer">testx</a></span>
     </footer>
   );
 }

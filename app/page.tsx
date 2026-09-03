@@ -7,12 +7,28 @@ import type { ExportSettings, UploadedTrack } from "@/lib/types";
 
 const MAX_FILE_SIZE = 200 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = ["wav", "mp3", "flac"];
+type Theme = "dark" | "light";
 
 export default function Home() {
   const [track, setTrack] = useState<UploadedTrack | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
+  const [theme, setTheme] = useState<Theme>("dark");
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem("wavevo-theme");
+    const initialTheme = savedTheme === "light" || savedTheme === "dark" ? savedTheme : "dark";
+    setTheme(initialTheme);
+    document.documentElement.dataset.theme = initialTheme;
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
+    window.localStorage.setItem("wavevo-theme", nextTheme);
+  };
 
   const acceptFile = useCallback(async (file?: File) => {
     if (!file) return;
@@ -42,13 +58,13 @@ export default function Home() {
     }
   }, []);
 
-  if (track) return <Editor track={track} onReset={() => setTrack(null)} />;
+  if (track) return <Editor track={track} onReset={() => setTrack(null)} theme={theme} onToggleTheme={toggleTheme} />;
 
   return (
     <main className="landing-shell">
       <nav className="nav">
         <a className="brand" href="#">wavevo<span>.</span></a>
-        <span className="nav-note">Audio into motion</span>
+        <div className="nav-actions"><span className="nav-note">Audio into motion</span><ThemeToggle theme={theme} onToggle={toggleTheme} /></div>
       </nav>
 
       <section className="hero">
@@ -82,12 +98,12 @@ export default function Home() {
         {error && <p className="error-message" role="alert">{error}</p>}
       </section>
 
-      <footer className="landing-footer"><span>Private by default</span><span>Built for sound</span></footer>
+      <AppFooter />
     </main>
   );
 }
 
-function Editor({ track, onReset }: { track: UploadedTrack; onReset: () => void }) {
+function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack; onReset: () => void; theme: Theme; onToggleTheme: () => void }) {
   const waveformRef = useRef<HTMLDivElement>(null);
   const waveSurferRef = useRef<WaveSurfer | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -121,8 +137,8 @@ function Editor({ track, onReset }: { track: UploadedTrack; onReset: () => void 
         peaks: [track.peaks],
         duration: track.duration,
         waveColor: settings.color,
-        progressColor: settings.showProgress ? "#f4f1e9" : settings.color,
-        cursorColor: "#f4f1e9",
+        progressColor: settings.showProgress ? (theme === "dark" ? "#f4f1e9" : "#17191d") : settings.color,
+        cursorColor: theme === "dark" ? "#f4f1e9" : "#17191d",
         cursorWidth: 2,
         height: 250,
         barWidth: 3,
@@ -164,10 +180,11 @@ function Editor({ track, onReset }: { track: UploadedTrack; onReset: () => void 
   useEffect(() => {
     waveSurferRef.current?.setOptions({
       waveColor: settings.color,
-      progressColor: settings.showProgress ? "#f4f1e9" : settings.color,
+      progressColor: settings.showProgress ? (theme === "dark" ? "#f4f1e9" : "#17191d") : settings.color,
+      cursorColor: theme === "dark" ? "#f4f1e9" : "#17191d",
     });
     setExportUrl("");
-  }, [settings.color, settings.showProgress, settings.countdown]);
+  }, [settings.color, settings.showProgress, settings.countdown, theme]);
 
   const togglePlayback = () => {
     const wave = waveSurferRef.current;
@@ -232,7 +249,7 @@ function Editor({ track, onReset }: { track: UploadedTrack; onReset: () => void 
     <main className="studio-shell">
       <nav className="nav studio-nav">
         <button className="brand brand-button" onClick={onReset}>wavevo<span>.</span></button>
-        <button className="new-track" onClick={onReset}>＋ New track</button>
+        <div className="nav-actions"><button className="new-track" onClick={onReset}>＋ New track</button><ThemeToggle theme={theme} onToggle={onToggleTheme} /></div>
       </nav>
 
       <section className="studio">
@@ -296,7 +313,32 @@ function Editor({ track, onReset }: { track: UploadedTrack; onReset: () => void 
         </section>
         {error && <p className="error-message" role="alert">{error}</p>}
       </section>
+      <AppFooter />
     </main>
+  );
+}
+
+function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }) {
+  return (
+    <button
+      className={`theme-toggle ${theme === "light" ? "light" : ""}`}
+      onClick={onToggle}
+      role="switch"
+      aria-checked={theme === "light"}
+      aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+      title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+    >
+      <span aria-hidden="true">☼</span><i /><span aria-hidden="true">☾</span>
+    </button>
+  );
+}
+
+function AppFooter() {
+  return (
+    <footer className="landing-footer">
+      <span>Wavevo · Audio into motion</span>
+      <span>Designed &amp; built by <a href="https://www.testx.sk" target="_blank" rel="noreferrer">www.testx.sk</a></span>
+    </footer>
   );
 }
 

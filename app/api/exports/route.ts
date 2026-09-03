@@ -22,9 +22,14 @@ export async function POST(request: Request) {
     const directory = uploadDirectory(id);
     const metadata = JSON.parse(await readFile(path.join(directory, "metadata.json"), "utf8")) as { duration: number };
     const imagePath = path.join(directory, "waveform.png");
+    const playedImagePath = path.join(directory, "waveform-played.png");
     const outputPath = path.join(directory, "export.mp4");
-    await renderWaveformImage(path.join(directory, "peaks.json"), imagePath, settings.color);
-    await createVideo(path.join(directory, "playback.mp3"), imagePath, outputPath, metadata.duration, settings);
+    const peaksPath = path.join(directory, "peaks.json");
+    await Promise.all([
+      renderWaveformImage(peaksPath, imagePath, settings.color),
+      renderWaveformImage(peaksPath, playedImagePath, "#f4f1e9"),
+    ]);
+    await createVideo(path.join(directory, "playback.mp3"), imagePath, playedImagePath, outputPath, metadata.duration, settings);
     return Response.json({ downloadUrl: `/api/exports/${id}` });
   } catch (error) {
     console.error(error);

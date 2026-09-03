@@ -99,6 +99,13 @@ function Editor({ track, onReset }: { track: UploadedTrack; onReset: () => void 
   const [exporting, setExporting] = useState(false);
   const [exportUrl, setExportUrl] = useState("");
   const [error, setError] = useState("");
+  const timelineScale = track.duration <= 60
+    ? { tick: 1, label: 10 }
+    : track.duration <= 300
+      ? { tick: 5, label: 30 }
+      : track.duration <= 900
+        ? { tick: 10, label: 60 }
+        : { tick: 30, label: 300 };
 
   useEffect(() => {
     let active = true;
@@ -122,7 +129,21 @@ function Editor({ track, onReset }: { track: UploadedTrack; onReset: () => void 
         barGap: 3,
         barRadius: 3,
         normalize: false,
-        plugins: [Timeline.create({ height: 28, timeInterval: 1, primaryLabelInterval: 10, style: { color: "#777b83", fontSize: "11px" } })],
+        plugins: [Timeline.create({
+          height: 38,
+          timeInterval: timelineScale.tick,
+          primaryLabelInterval: timelineScale.label,
+          secondaryLabelInterval: timelineScale.label,
+          secondaryLabelOpacity: 1,
+          formatTimeCallback: formatTime,
+          style: {
+            color: "#777b83",
+            fontSize: "10px",
+            borderTop: "1px solid rgba(244, 241, 233, 0.12)",
+            marginTop: "18px",
+            paddingTop: "9px",
+          },
+        })],
       });
       wave.on("ready", () => setReady(true));
       wave.on("play", () => setPlaying(true));
@@ -179,6 +200,14 @@ function Editor({ track, onReset }: { track: UploadedTrack; onReset: () => void 
     void wave.play();
   };
 
+  const restartPlayback = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
+    setCounting(null);
+    waveSurferRef.current?.setTime(0);
+    setCurrentTime(0);
+  };
+
   const createExport = async () => {
     setExporting(true);
     setError("");
@@ -220,11 +249,17 @@ function Editor({ track, onReset }: { track: UploadedTrack; onReset: () => void 
         </div>
 
         <div className="transport">
-          <button className="skip" onClick={() => waveSurferRef.current?.skip(-10)} aria-label="Back 10 seconds">↶<small>10</small></button>
+          <button className="restart" onClick={restartPlayback} disabled={!ready} aria-label="Go back to start" title="Go back to start">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 5v14M19 6l-9 6 9 6V6Z" />
+            </svg>
+            <span>Start</span>
+          </button>
+          <SkipButton direction="back" onClick={() => waveSurferRef.current?.skip(-10)} disabled={!ready} />
           <button className="play" onClick={togglePlayback} disabled={!ready} aria-label={playing ? "Pause" : "Play"}>
             {counting !== null ? "×" : playing ? "Ⅱ" : "▶"}
           </button>
-          <button className="skip" onClick={() => waveSurferRef.current?.skip(10)} aria-label="Forward 10 seconds">↷<small>10</small></button>
+          <SkipButton direction="forward" onClick={() => waveSurferRef.current?.skip(10)} disabled={!ready} />
           <div className="time-readout"><strong>{formatTime(currentTime)}</strong><span>/ {formatTime(track.duration)}</span></div>
         </div>
 
@@ -262,5 +297,20 @@ function Editor({ track, onReset }: { track: UploadedTrack; onReset: () => void 
         {error && <p className="error-message" role="alert">{error}</p>}
       </section>
     </main>
+  );
+}
+
+function SkipButton({ direction, onClick, disabled }: { direction: "back" | "forward"; onClick: () => void; disabled: boolean }) {
+  const arrow = (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M20 12H4M10 6l-6 6 6 6" />
+    </svg>
+  );
+  return (
+    <button className={`skip ${direction}`} onClick={onClick} disabled={disabled} aria-label={`${direction === "back" ? "Back" : "Forward"} 10 seconds`}>
+      {direction === "back" && arrow}
+      <span>10s</span>
+      {direction === "forward" && arrow}
+    </button>
   );
 }

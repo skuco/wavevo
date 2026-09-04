@@ -36,6 +36,8 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         "Content-Type": formats[format],
         "Content-Length": String(details.size),
         "Content-Disposition": `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`,
+        "Cache-Control": "no-store, max-age=0",
+        "Pragma": "no-cache",
       },
     });
   } catch {

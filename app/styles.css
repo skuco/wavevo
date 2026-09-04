@@ -101,7 +101,7 @@ select { color: var(--paper); background: var(--panel); border: 1px solid var(--
 .export-panel { margin-top: 18px; padding: 30px; border: 1px solid var(--line); display: grid; grid-template-columns: minmax(210px, .8fr) minmax(310px, 1.25fr) auto; gap: 30px; align-items: center; background: linear-gradient(90deg, rgba(255,92,53,.07), transparent 45%); }
 .export-panel h2 { margin: 8px 0 5px; font-size: 24px; }
 .export-panel p { margin: 0; color: var(--muted); font-size: 11px; }
-.export-options { display: grid; grid-template-columns: minmax(220px, 1fr); gap: 12px; }
+.export-options { display: grid; grid-template-columns: repeat(2, minmax(150px, 1fr)); gap: 12px; }
 .export-field { display: grid; gap: 7px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.1px; font-size: 9px; }
 .export-field select { height: 40px; width: 100%; }
 .export-actions { display: flex; position: relative; flex-direction: column; gap: 8px; }

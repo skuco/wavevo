@@ -10,10 +10,13 @@ Wavevo is a focused waveform-video studio. Upload a WAV, MP3, or FLAC file, prev
 - Browser-compatible MP3 playback proxy
 - Click-to-seek waveform, play/pause, ±10 second controls, and timeline
 - Custom waveform color
-- Rounded bars, dense bars, and classic wave visualization styles
+- Rounded bars, square bars, particles, and classic wave visualization styles
+- Low, medium, and high waveform density, including smooth-to-detailed classic waves
 - Optional playback/export progress indicator
 - Optional 3, 5, or 10 second countdown
 - 1920×1080, 30 fps MP4 or MOV with H.264/AAC
+- Independent dark or light theme for exported video
+- Duration-aware timeline and synchronized playhead in exported videos
 
 ## Run locally
 

@@ -3,7 +3,7 @@
 import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import type WaveSurfer from "wavesurfer.js";
 import { formatTime } from "@/lib/format";
-import type { ExportSettings, UploadedTrack, VideoFormat, WaveformStyle } from "@/lib/types";
+import type { ExportSettings, UploadedTrack, VideoFormat, VideoTheme, WaveformDensity, WaveformStyle } from "@/lib/types";
 
 const MAX_FILE_SIZE = 200 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = ["wav", "mp3", "flac"];
@@ -16,14 +16,117 @@ const VIDEO_FORMATS: Record<VideoFormat, { label: string }> = {
 
 const WAVEFORM_STYLES: Record<WaveformStyle, string> = {
   rounded: "Rounded bars",
-  dense: "Dense bars",
+  square: "Square bars",
+  particles: "Particles",
   wave: "Classic wave",
 };
 
-function waveformRenderOptions(style: WaveformStyle) {
-  if (style === "wave") return { barWidth: undefined, barGap: undefined, barRadius: undefined };
-  if (style === "dense") return { barWidth: 2, barGap: 2, barRadius: 2 };
-  return { barWidth: 3, barGap: 3, barRadius: 3 };
+const WAVEFORM_DENSITIES: Record<WaveformDensity, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+};
+
+function shapeAmplitude(value: number) {
+  return Math.pow(Math.max(0, Math.min(1, Math.abs(value))), 1.65);
+}
+
+function particleRenderer(density: WaveformDensity) {
+  return (channels: Array<Float32Array | number[]>, context: CanvasRenderingContext2D) => {
+    const peaks = channels[0];
+    if (!peaks?.length) return;
+    const { width, height } = context.canvas;
+    const spacing = density === "low" ? 12 : density === "high" ? 5 : 8;
+    const radius = density === "low" ? 2.4 : density === "high" ? 1.4 : 1.9;
+    const center = height / 2;
+    context.beginPath();
+    for (let x = spacing / 2; x < width; x += spacing) {
+      const peak = shapeAmplitude(peaks[Math.min(peaks.length - 1, Math.floor((x / width) * peaks.length))] || 0);
+      const amplitude = Math.max(spacing / 2, peak * height * 0.27);
+      for (let y = center - amplitude; y <= center + amplitude; y += spacing) {
+        context.moveTo(x + radius, y);
+        context.arc(x, y, radius, 0, Math.PI * 2);
+      }
+    }
+    context.fill();
+    context.closePath();
+  };
+}
+
+function classicWaveRenderer(density: WaveformDensity) {
+  return (channels: Array<Float32Array | number[]>, context: CanvasRenderingContext2D) => {
+    const peaks = channels[0];
+    if (!peaks?.length) return;
+    const { width, height } = context.canvas;
+    const requestedPoints = density === "low" ? 160 : density === "high" ? 720 : 360;
+    const pointCount = Math.max(2, Math.min(requestedPoints, peaks.length, Math.floor(width)));
+    const amplitudes = Array.from({ length: pointCount }, (_, point) => {
+      const start = Math.floor((point / pointCount) * peaks.length);
+      const end = Math.max(start + 1, Math.floor(((point + 1) / pointCount) * peaks.length));
+      let maximum = 0;
+      for (let source = start; source < end; source += 1) maximum = Math.max(maximum, Math.abs(peaks[source] || 0));
+      return shapeAmplitude(maximum);
+    });
+    const smoothingRadius = density === "low" ? 2 : density === "medium" ? 1 : 0;
+    const smoothed = amplitudes.map((_, point) => {
+      let total = 0;
+      let samples = 0;
+      for (let offset = -smoothingRadius; offset <= smoothingRadius; offset += 1) {
+        const index = Math.max(0, Math.min(amplitudes.length - 1, point + offset));
+        total += amplitudes[index];
+        samples += 1;
+      }
+      return total / samples;
+    });
+    const center = height / 2;
+    const halfHeight = height * 0.27;
+    context.beginPath();
+    smoothed.forEach((amplitude, point) => {
+      const x = (point / (pointCount - 1)) * width;
+      const y = center - Math.max(1, amplitude * halfHeight);
+      if (point === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    for (let point = pointCount - 1; point >= 0; point -= 1) {
+      const x = (point / (pointCount - 1)) * width;
+      context.lineTo(x, center + Math.max(1, smoothed[point] * halfHeight));
+    }
+    context.closePath();
+    context.fill();
+  };
+}
+
+function barRenderer(style: "rounded" | "square", density: WaveformDensity) {
+  return (channels: Array<Float32Array | number[]>, context: CanvasRenderingContext2D) => {
+    const peaks = channels[0];
+    if (!peaks?.length) return;
+    const { width, height } = context.canvas;
+    const slotWidth = density === "low" ? 8 : density === "high" ? 2 : 4;
+    const fillRatio = density === "low" ? 0.5 : density === "high" ? 0.72 : 0.62;
+    const bars = Math.max(1, Math.min(peaks.length, Math.floor(width / slotWidth)));
+    const center = height / 2;
+    const maxHeight = height * 0.54;
+    for (let bar = 0; bar < bars; bar += 1) {
+      const start = Math.floor((bar / bars) * peaks.length);
+      const end = Math.max(start + 1, Math.floor(((bar + 1) / bars) * peaks.length));
+      let maximum = 0;
+      for (let source = start; source < end; source += 1) maximum = Math.max(maximum, Math.abs(peaks[source] || 0));
+      const barHeight = Math.max(2, shapeAmplitude(maximum) * maxHeight);
+      const x = (bar / bars) * width;
+      const barWidth = Math.max(1, (fillRatio / bars) * width);
+      const y = center - barHeight / 2;
+      context.beginPath();
+      if (style === "rounded") context.roundRect(x, y, barWidth, barHeight, Math.min(barWidth / 2, barHeight / 2));
+      else context.rect(x, y, barWidth, barHeight);
+      context.fill();
+    }
+  };
+}
+
+function waveformRenderOptions(style: WaveformStyle, density: WaveformDensity) {
+  if (style === "particles") return { barWidth: undefined, barGap: undefined, barRadius: undefined, renderFunction: particleRenderer(density) };
+  if (style === "wave") return { barWidth: undefined, barGap: undefined, barRadius: undefined, renderFunction: classicWaveRenderer(density) };
+  return { barWidth: undefined, barGap: undefined, barRadius: undefined, renderFunction: barRenderer(style, density) };
 }
 
 function safeExportName(value: string) {
@@ -132,7 +235,7 @@ function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [counting, setCounting] = useState<number | null>(null);
-  const [settings, setSettings] = useState<ExportSettings>({ color: "#ff5c35", showProgress: true, countdown: 3, waveformStyle: "rounded" });
+  const [settings, setSettings] = useState<ExportSettings>({ color: "#ff5c35", showProgress: true, countdown: 3, waveformStyle: "rounded", waveformDensity: "medium", videoTheme: "dark" });
   const [exporting, setExporting] = useState(false);
   const [exportUrl, setExportUrl] = useState("");
   const [videoFormat, setVideoFormat] = useState<VideoFormat>("mp4");
@@ -163,7 +266,7 @@ function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack
         cursorColor: theme === "dark" ? "#f4f1e9" : "#17191d",
         cursorWidth: 2,
         height: 250,
-        ...waveformRenderOptions(settings.waveformStyle),
+        ...waveformRenderOptions(settings.waveformStyle, settings.waveformDensity),
         normalize: false,
         plugins: [Timeline.create({
           height: 38,
@@ -202,10 +305,10 @@ function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack
       waveColor: settings.color,
       progressColor: settings.showProgress ? (theme === "dark" ? "#f4f1e9" : "#17191d") : settings.color,
       cursorColor: theme === "dark" ? "#f4f1e9" : "#17191d",
-      ...waveformRenderOptions(settings.waveformStyle),
+      ...waveformRenderOptions(settings.waveformStyle, settings.waveformDensity),
     });
     setExportUrl("");
-  }, [settings.color, settings.showProgress, settings.countdown, settings.waveformStyle, theme]);
+  }, [settings.color, settings.showProgress, settings.countdown, settings.waveformStyle, settings.waveformDensity, settings.videoTheme, theme]);
 
   useEffect(() => {
     setExportUrl("");
@@ -319,8 +422,10 @@ function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack
               </select>
             </div>
             <div className="control-row">
-              <div><label htmlFor="progress">Playback progress</label><p>Highlight the played section</p></div>
-              <button id="progress" role="switch" aria-checked={settings.showProgress} className={`switch ${settings.showProgress ? "on" : ""}`} onClick={() => setSettings({ ...settings, showProgress: !settings.showProgress })}><span /></button>
+              <div><label htmlFor="wave-density">Density</label><p>Control the waveform detail or number of particles</p></div>
+              <select id="wave-density" value={settings.waveformDensity} onChange={(event) => setSettings({ ...settings, waveformDensity: event.target.value as WaveformDensity })}>
+                {(Object.entries(WAVEFORM_DENSITIES) as Array<[WaveformDensity, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
             </div>
           </section>
 
@@ -332,6 +437,10 @@ function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack
                 <option value={0}>Off</option><option value={3}>3 sec</option><option value={5}>5 sec</option><option value={10}>10 sec</option>
               </select>
             </div>
+            <div className="control-row progress-row">
+              <div><label htmlFor="progress">Playback progress</label><p>Highlight the played section</p></div>
+              <button id="progress" role="switch" aria-checked={settings.showProgress} className={`switch ${settings.showProgress ? "on" : ""}`} onClick={() => setSettings({ ...settings, showProgress: !settings.showProgress })}><span /></button>
+            </div>
           </section>
         </div>
 
@@ -342,6 +451,13 @@ function Editor({ track, onReset, theme, onToggleTheme }: { track: UploadedTrack
               <span>Video type</span>
               <select value={videoFormat} onChange={(event) => setVideoFormat(event.target.value as VideoFormat)}>
                 {(Object.entries(VIDEO_FORMATS) as Array<[VideoFormat, (typeof VIDEO_FORMATS)[VideoFormat]]>).map(([value, option]) => <option key={value} value={value}>{option.label}</option>)}
+              </select>
+            </label>
+            <label className="export-field">
+              <span>Video theme</span>
+              <select value={settings.videoTheme} onChange={(event) => setSettings({ ...settings, videoTheme: event.target.value as VideoTheme })}>
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
               </select>
             </label>
           </div>

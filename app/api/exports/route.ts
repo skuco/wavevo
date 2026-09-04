@@ -13,7 +13,9 @@ const requestSchema = z.object({
   color: z.string().regex(/^#[0-9a-f]{6}$/i),
   showProgress: z.boolean(),
   countdown: z.union([z.literal(0), z.literal(3), z.literal(5), z.literal(10)]),
-  waveformStyle: z.enum(["rounded", "dense", "wave"]),
+  waveformStyle: z.enum(["rounded", "square", "particles", "wave"]),
+  waveformDensity: z.enum(["low", "medium", "high"]),
+  videoTheme: z.enum(["dark", "light"]),
   format: z.enum(["mp4", "mov"]),
 });
 
@@ -28,11 +30,11 @@ export async function POST(request: Request) {
     const outputPath = path.join(directory, `export.${settings.format}`);
     const peaksPath = path.join(directory, "peaks.json");
     await Promise.all([
-      renderWaveformImage(peaksPath, imagePath, settings.color, settings.waveformStyle),
-      renderWaveformImage(peaksPath, playedImagePath, "#f4f1e9", settings.waveformStyle),
+      renderWaveformImage(peaksPath, imagePath, settings.color, settings.waveformStyle, settings.waveformDensity, settings.videoTheme),
+      renderWaveformImage(peaksPath, playedImagePath, settings.videoTheme === "light" ? "#17191d" : "#f4f1e9", settings.waveformStyle, settings.waveformDensity, settings.videoTheme),
     ]);
     await createVideo(path.join(directory, "playback.mp3"), imagePath, playedImagePath, outputPath, metadata.duration, settings, settings.format);
-    return Response.json({ downloadUrl: `/api/exports/${id}?format=${settings.format}` });
+    return Response.json({ downloadUrl: `/api/exports/${id}?format=${settings.format}&v=${Date.now()}` });
   } catch (error) {
     console.error(error);
     const message = error instanceof Error && error.name === "ZodError" ? "Invalid export settings." : "Video export failed. Check that FFmpeg supports H.264 on this machine.";

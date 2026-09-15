@@ -3,7 +3,17 @@ export type UploadedTrack = {
   name: string;
   duration: number;
   peaks: number[];
+  channelPeaks?: number[][];
   audioUrl: string;
+};
+
+export type SessionTrack = UploadedTrack & {
+  color: string;
+  volume: number;
+  pan: number;
+  muted: boolean;
+  solo: boolean;
+  start: number;
 };
 
 export type WaveformStyle = "rounded" | "square" | "particles" | "wave";
@@ -20,3 +30,14 @@ export type ExportSettings = {
 };
 
 export type VideoFormat = "mp4" | "mov";
+
+export type StudioRenderSession = {
+  tracks: Array<SessionTrack & { meterPeaks: number[] }>;
+  settings: ExportSettings;
+  masterVolume: number;
+  selectedId: string;
+  compact: boolean;
+  loop: boolean;
+  snap: boolean;
+  snapInterval: number;
+};

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./styles.css";
 
 export const metadata: Metadata = {
-  title: "Wavevo — Audio into motion",
-  description: "Turn audio into a polished waveform video.",
+  title: "Wavevo — Multitrack audio studio",
+  description: "Bring your tracks together. Mix audio on a colorful timeline and export your sound as a waveform video.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

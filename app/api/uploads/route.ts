@@ -34,14 +34,16 @@ export async function POST(request: Request) {
     if (!matchesContainer) throw new Error("The file contents do not match its WAV, MP3, or FLAC extension.");
     const playbackPath = path.join(directory, "playback.mp3");
     const peaksPath = path.join(directory, "peaks.json");
-    const [peaks] = await Promise.all([
+    const [peaks, , channelPeaks] = await Promise.all([
       createPeaks(uploaded.path, details.duration),
       createPlaybackCopy(uploaded.path, playbackPath),
+      details.channels > 1 ? Promise.all([createPeaks(uploaded.path, details.duration, 0), createPeaks(uploaded.path, details.duration, 1)]) : Promise.resolve(null),
     ]);
     await writeFile(peaksPath, JSON.stringify(peaks));
+    await writeFile(path.join(directory, "channels.json"), JSON.stringify(channelPeaks || [peaks]));
     await writeFile(path.join(directory, "metadata.json"), JSON.stringify({ ...details, name: uploaded.name }));
 
-    return Response.json({ id, name: uploaded.name, duration: details.duration, peaks, audioUrl: `/api/uploads/${id}/audio` });
+    return Response.json({ id, name: uploaded.name, duration: details.duration, peaks, channelPeaks: channelPeaks || [peaks], audioUrl: `/api/uploads/${id}/audio` });
   } catch (error) {
     await rm(directory, { recursive: true, force: true });
     const message = error instanceof Error ? error.message : "Upload could not be processed.";

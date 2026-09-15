@@ -14,7 +14,7 @@ const WAVEFORM_INSET = 110;
 
 type ProbeResult = {
   format?: { duration?: string; format_name?: string };
-  streams?: Array<{ codec_type?: string; codec_name?: string }>;
+  streams?: Array<{ codec_type?: string; codec_name?: string; channels?: number }>;
 };
 
 function binaryPath(value: string | null): string {
@@ -28,7 +28,7 @@ export async function probeAudio(inputPath: string) {
   const audioStream = result.streams?.find((stream) => stream.codec_type === "audio");
   const duration = Number(result.format?.duration);
   if (!audioStream || !Number.isFinite(duration) || duration <= 0) throw new Error("The uploaded file does not contain readable audio.");
-  return { duration, codec: audioStream.codec_name || "unknown", format: result.format?.format_name || "unknown" };
+  return { duration, channels: audioStream.channels || 1, codec: audioStream.codec_name || "unknown", format: result.format?.format_name || "unknown" };
 }
 
 export async function createPlaybackCopy(inputPath: string, outputPath: string) {
@@ -37,11 +37,11 @@ export async function createPlaybackCopy(inputPath: string, outputPath: string) 
   ]);
 }
 
-export async function createPeaks(inputPath: string, duration: number) {
+export async function createPeaks(inputPath: string, duration: number, channel?: number) {
   const samplesPerPeak = Math.max(1, Math.ceil((duration * SAMPLE_RATE) / PEAK_COUNT));
   return new Promise<number[]>((resolve, reject) => {
     const process = spawn(binaryPath(ffmpegPath), [
-      "-v", "error", "-i", inputPath, "-map", "0:a:0", "-ac", "1", "-ar", String(SAMPLE_RATE), "-f", "s16le", "pipe:1",
+      "-v", "error", "-i", inputPath, "-map", "0:a:0", ...(channel === undefined ? [] : ["-af", `pan=mono|c0=c${channel}`]), "-ac", "1", "-ar", String(SAMPLE_RATE), "-f", "s16le", "pipe:1",
     ], { stdio: ["ignore", "pipe", "pipe"] });
     const peaks: number[] = [];
     const errors: Buffer[] = [];

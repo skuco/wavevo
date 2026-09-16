@@ -2,9 +2,12 @@
 
 import { CSSProperties, PointerEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
+import { SnapHelp } from "./snap-help";
+import { SessionTitle } from "./session-title";
 import { Waveform } from "./waveform";
 import { useTransport } from "./use-transport";
 import { formatTime } from "@/lib/format";
+import { VIDEO_RESOLUTIONS, type VideoResolution } from "@/lib/video-resolution";
 import type { ExportSettings, SessionTrack, StudioRenderSession, VideoFormat, WaveformDensity, WaveformStyle } from "@/lib/types";
 
 const COLORS = ["#18c9a7", "#26c4db", "#ac89f5", "#efad64", "#ed88ad", "#8bca76"];
@@ -19,6 +22,7 @@ const NO_TRACKS: SessionTrack[] = [];
 
 export default function Studio({ renderSession }: { renderSession?: StudioRenderSession }) {
   const [tracks, setTracks] = useState<SessionTrack[]>(renderSession?.tracks || []);
+  const [sessionName, setSessionName] = useState(renderSession?.sessionName || "Untitled session");
   const [selectedId, setSelectedId] = useState(renderSession?.selectedId || "");
   const [theme, setTheme] = useState(renderSession?.settings.videoTheme || "dark");
   const [renderTime, setRenderTime] = useState(-(renderSession?.settings.countdown || 0));
@@ -185,12 +189,15 @@ export default function Studio({ renderSession }: { renderSession?: StudioRender
         <span className="toolbar-divider" />
         <div className="time-display" aria-label={`Playhead ${timecode(transport.currentTime)}`}><span className="time-label">PLAYHEAD</span><output>{timecode(transport.currentTime)}</output></div>
         <span className="toolbar-divider" />
-        <label className="snap-toggle"><input type="checkbox" checked={snap} onChange={event => setSnap(event.target.checked)} /> Snap</label>
-        <select className="snap-select" aria-label="Snap interval" value={snapInterval} disabled={!snap} onChange={event => setSnapInterval(Number(event.target.value))}><option value={1}>1 second</option><option value={0.5}>½ second</option><option value={0.1}>0.1 second</option></select>
+        <div className="snap-controls">
+          <label className="snap-toggle"><input type="checkbox" checked={snap} onChange={event => setSnap(event.target.checked)} /> Snap</label>
+          <SnapHelp />
+          <select className="snap-select" aria-label="Snap interval" value={snapInterval} disabled={!snap} onChange={event => setSnapInterval(Number(event.target.value))}><option value={1}>1 second</option><option value={0.5}>½ second</option><option value={0.1}>0.1 second</option></select>
+        </div>
         <div className="zoom-controls"><button className="icon-button" disabled={zoom <= 1} onClick={() => setZoom(Math.max(1, zoom / 1.5))} aria-label="Zoom out" title="Zoom out"><Icon name="zoomOut" /></button><span>{Math.round(zoom * 100)}%</span><button className="icon-button" disabled={zoom >= 8} onClick={() => setZoom(Math.min(8, zoom * 1.5))} aria-label="Zoom in" title="Zoom in"><Icon name="zoomIn" /></button><button className="icon-button" onClick={() => { setZoom(1); if (viewportRef.current) viewportRef.current.scrollLeft = 0; }} aria-label="Fit session to view" title="Fit session"><Icon name="fit" /></button></div>
       </section>
 
-      <section className="session-heading"><div><h1>Untitled session</h1><span>{tracks.length} {tracks.length === 1 ? "track" : "tracks"}<b>·</b>{formatTime(transport.duration)} duration</span></div><div className="session-heading-actions"><span className="timeline-hint">Drag a clip header to move it</span><button className={`icon-button ${compact ? "active" : ""}`} onClick={() => setCompact(!compact)} aria-label="Compact track height" aria-pressed={compact} title="Compact tracks"><Icon name="grid" size={16} /></button></div></section>
+      <section className="session-heading"><div><SessionTitle value={sessionName} onChange={setSessionName} readOnly={!!renderSession} /><span>{tracks.length} {tracks.length === 1 ? "track" : "tracks"}<b>·</b>{formatTime(transport.duration)} duration</span></div><div className="session-heading-actions"><span className="timeline-hint">Drag a clip header to move it</span><button className={`icon-button ${compact ? "active" : ""}`} onClick={() => setCompact(!compact)} aria-label="Compact track height" aria-pressed={compact} title="Compact tracks"><Icon name="grid" size={16} /></button></div></section>
 
       {(error || transport.error) && <div className="error-banner" role="alert"><span>{error || transport.error}</span><button className="icon-button" aria-label="Dismiss error" onClick={() => { setError(""); transport.clearError(); }}><Icon name="close" size={16} /></button></div>}
       {uploading && <div className="upload-status" role="status"><span className="spinner" />{uploading}</div>}
@@ -246,16 +253,18 @@ export default function Studio({ renderSession }: { renderSession?: StudioRender
 
       <footer className="status-bar"><span className="status-indicator"><i className={transport.playing ? "playing" : ""} />{uploading ? "Importing audio" : tracks.length && !transport.ready ? "Preparing playback" : renderSession && renderTime < 0 ? "Counting in" : transport.playing ? "Playing" : "Ready"}<span className="footer-separator">/</span>{audible.length} {audible.length === 1 ? "track" : "tracks"} audible</span><div className="keyboard-hints"><span><kbd>space</kbd> play / pause</span><span><kbd>←</kbd><kbd>→</kbd> seek</span></div><span className="footer-credit">Audio into motion<span>·</span><a href="https://www.testx.sk" target="_blank" rel="noreferrer">testx</a></span></footer>
       {dragging && <div className="drop-overlay"><Icon name="upload" size={40} /><h2>Add to your session</h2><p>Drop your audio files anywhere</p></div>}
-      {exportOpen && <ExportDialog tracks={tracks} masterVolume={masterVolume} settings={{ ...settings, color: selected?.color || COLORS[0] }} onSettings={setSettings} editorTheme={theme} view={{ selectedId: selected?.id || "", compact, loop, snap, snapInterval }} onClose={() => setExportOpen(false)} />}
+      {exportOpen && <ExportDialog sessionName={sessionName} tracks={tracks} masterVolume={masterVolume} settings={{ ...settings, color: selected?.color || COLORS[0] }} onSettings={setSettings} editorTheme={theme} view={{ selectedId: selected?.id || "", compact, loop, snap, snapInterval }} onClose={() => setExportOpen(false)} />}
     </main>
   );
 }
 
 type StudioView = Pick<StudioRenderSession, "selectedId" | "compact" | "loop" | "snap" | "snapInterval">;
 
-function ExportDialog({ tracks, masterVolume, settings, onSettings, onClose, editorTheme, view }: { tracks: SessionTrack[]; masterVolume: number; settings: ExportSettings; onSettings: (settings: ExportSettings) => void; onClose: () => void; editorTheme: string; view: StudioView }) {
+function ExportDialog({ sessionName, tracks, masterVolume, settings, onSettings, onClose, editorTheme, view }: { sessionName: string; tracks: SessionTrack[]; masterVolume: number; settings: ExportSettings; onSettings: (settings: ExportSettings) => void; onClose: () => void; editorTheme: string; view: StudioView }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [format, setFormat] = useState<VideoFormat>("mp4");
+  const [resolution, setResolution] = useState<VideoResolution>("1080p");
+  const dimensions = VIDEO_RESOLUTIONS[resolution];
   const [videoTheme, setVideoTheme] = useState(editorTheme);
   const [exporting, setExporting] = useState(false);
   const [download, setDownload] = useState("");
@@ -268,7 +277,7 @@ function ExportDialog({ tracks, masterVolume, settings, onSettings, onClose, edi
   const render = async () => {
     setExporting(true); setError(""); setDownload("");
     try {
-      const response = await fetch("/api/mix-exports", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tracks: tracks.map(({ id, name, color, volume, pan, muted, solo, start }) => ({ uploadId: id, name, color, volume, pan, muted, solo, start })), masterVolume, ...settings, videoTheme, format, view }) });
+      const response = await fetch("/api/mix-exports", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionName, tracks: tracks.map(({ id, name, color, volume, pan, muted, solo, start }) => ({ uploadId: id, name, color, volume, pan, muted, solo, start })), masterVolume, ...settings, videoTheme, format, resolution, view }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Export failed.");
       setDownload(payload.downloadUrl);
@@ -277,16 +286,18 @@ function ExportDialog({ tracks, masterVolume, settings, onSettings, onClose, edi
   };
   return <dialog className="export-dialog" ref={ref} onCancel={event => { if (exporting) event.preventDefault(); else onClose(); }} onClick={event => { if (event.target === event.currentTarget && !exporting) onClose(); }} aria-labelledby="export-title">
     <div className="dialog-heading"><span className="eyebrow">AUDIO INTO MOTION</span><button className="icon-button" aria-label="Close export" onClick={onClose} disabled={exporting}><Icon name="close" /></button></div><h2 id="export-title">Your studio, in motion.</h2><p>Export a video of the full studio interface with your session audio.</p>
-    <div className="export-summary"><Icon name="wave" size={26} /><div><strong>Full studio interface</strong><span>{tracks.length} visible {tracks.length === 1 ? "track" : "tracks"} · {formatTime(duration)} · 1920 × 1080 · 30 fps</span></div></div>
+    <div className="export-summary"><Icon name="wave" size={26} /><div><strong title={sessionName}>{sessionName}</strong><span>{tracks.length} visible {tracks.length === 1 ? "track" : "tracks"} · {formatTime(duration)} · {dimensions.width} × {dimensions.height} · 30 fps</span></div></div>
     <fieldset disabled={exporting} className="export-fields">
       <label>Video format<select value={format} onChange={event => { setFormat(event.target.value as VideoFormat); setDownload(""); }}><option value="mp4">MP4 · H.264 / AAC</option><option value="mov">MOV · H.264 / AAC</option></select></label>
+      <label>Resolution<select value={resolution} onChange={event => { setResolution(event.target.value as VideoResolution); setDownload(""); }}>{Object.entries(VIDEO_RESOLUTIONS).map(([value, size]) => <option key={value} value={value}>{size.label} · {size.width} × {size.height}</option>)}</select></label>
       <label>Interface theme<select value={videoTheme} onChange={event => { setVideoTheme(event.target.value); setDownload(""); }}><option value="dark">Dark</option><option value="light">Light</option></select></label>
       <label>Countdown<select value={settings.countdown} onChange={event => changeSettings({ countdown: Number(event.target.value) as ExportSettings["countdown"] })}><option value={0}>None</option><option value={3}>3 seconds</option><option value={5}>5 seconds</option><option value={10}>10 seconds</option></select></label>
       <label className="export-progress">Moving playhead<input type="checkbox" checked={settings.showProgress} onChange={event => changeSettings({ showProgress: event.target.checked })} /></label>
     </fieldset>
+    {resolution === "4k" && <p className="export-resolution-note">4K gives you sharper detail with larger files and longer render times.</p>}
     <p className="export-note">Includes every track lane, its color and name, the timeline, controls, clock, and live meters. The full session fits in the frame; your audio follows the track and master settings.</p>
     {error && <p className="dialog-error" role="alert">{error}</p>}
-    <div className="dialog-actions"><button className="secondary-button" disabled={exporting} onClick={onClose}>Back to session</button>{download ? <a className="primary-button" href={download} download={`wavevo-session.${format}`}><Icon name="download" size={16} /> Download video</a> : <button className="primary-button" disabled={exporting || !audible.length || masterVolume === 0} onClick={() => void render()}>{exporting ? <><span className="spinner" /> Rendering…</> : <><Icon name="play" size={15} /> Render video</>}</button>}</div>
+    <div className="dialog-actions"><button className="secondary-button" disabled={exporting} onClick={onClose}>Back to session</button>{download ? <a className="primary-button" href={download} download><Icon name="download" size={16} /> Download video</a> : <button className="primary-button" disabled={exporting || !audible.length || masterVolume === 0} onClick={() => void render()}>{exporting ? <><span className="spinner" /> Rendering…</> : <><Icon name="play" size={15} /> Render video</>}</button>}</div>
     {masterVolume === 0 && <p className="dialog-error">Raise the master volume to export your session.</p>}
     {exporting && <p className="render-status" role="status">Creating your video. Longer sessions can take a few minutes.</p>}
   </dialog>;

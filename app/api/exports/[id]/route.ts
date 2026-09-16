@@ -25,9 +25,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       stat(filePath),
       readFile(path.join(directory, "metadata.json"), "utf8"),
     ]);
-    const metadata = JSON.parse(metadataText) as { name?: string };
+    const metadata = JSON.parse(metadataText) as { name?: string; sessionName?: string };
     const originalName = metadata.name || "wavevo";
-    const originalBase = path.basename(originalName, path.extname(originalName));
+    const originalBase = metadata.sessionName || path.basename(originalName, path.extname(originalName));
     const safeBase = originalBase.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/[. ]+$/g, "").trim() || "wavevo";
     const downloadName = `${safeBase}-wavevo.${format}`;
     const asciiFallback = downloadName.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "-");

@@ -4,6 +4,7 @@ import path from "node:path";
 import { chromium } from "playwright-core";
 import ffmpeg from "ffmpeg-static";
 import type { ExportSettings, VideoFormat } from "@/lib/types";
+import { VIDEO_RESOLUTIONS, type VideoResolution } from "@/lib/video-resolution";
 
 async function browserPath() {
   const candidates = [
@@ -33,12 +34,14 @@ function renderOrigin() {
 
 // Render the actual Studio component at each video timestamp. This keeps its
 // canvas waveforms, CSS, icons, clock, playhead, and meters identical to the app.
-export async function createStudioVideo(id: string, audioPath: string, outputPath: string, duration: number, settings: ExportSettings, format: VideoFormat) {
+export async function createStudioVideo(id: string, audioPath: string, outputPath: string, duration: number, settings: ExportSettings, format: VideoFormat, resolution: VideoResolution = "1080p") {
   if (!ffmpeg) throw new Error("FFmpeg is unavailable.");
   const origin = renderOrigin();
   const browser = await chromium.launch({ executablePath: await browserPath(), headless: true, chromiumSandbox: true });
   try {
-    const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1, reducedMotion: "reduce" });
+    // Keep the same composition at both resolutions. At 2× pixel density the
+    // browser rasterizes text, icons, and DPR-aware waveform canvases in native 4K.
+    const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: VIDEO_RESOLUTIONS[resolution].scale, reducedMotion: "reduce" });
     await page.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
     const response = await page.goto(`${origin}/studio-render/${id}`, { waitUntil: "networkidle", timeout: 60000 });
     if (!response?.ok()) throw new Error("Could not open the studio video view.");
@@ -77,7 +80,7 @@ export async function createStudioVideo(id: string, audioPath: string, outputPat
           window.dispatchEvent(new CustomEvent("wavevo:render-frame", { detail: time }));
           await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
         }, time);
-        const png = await page.screenshot({ type: "png", animations: "disabled", caret: "hide", timeout: 30000 });
+        const png = await page.screenshot({ type: "png", scale: "device", animations: "disabled", caret: "hide", timeout: 30000 });
         if (frame === 0) await writeFile(path.join(path.dirname(outputPath), "studio-frame.png"), png);
         await new Promise<void>((resolve, reject) => encoder.stdin.write(png, caught => caught ? reject(caught) : resolve()));
       }

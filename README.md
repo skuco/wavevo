@@ -1,6 +1,6 @@
 # Wavevo
 
-Wavevo is a multitrack audio and video studio. Arrange WAV, MP3, and FLAC tracks on a shared timeline, balance your audio, and export a 1080p video of the full studio interface.
+Wavevo is a multitrack audio and video studio. Arrange WAV, MP3, and FLAC tracks on a shared timeline, balance your audio, and export a Full HD or 4K video of the full studio interface.
 
 ## PoC features
 
@@ -17,7 +17,7 @@ Wavevo is a multitrack audio and video studio. Arrange WAV, MP3, and FLAC tracks
 - Rounded bars, square bars, particles, and classic wave visualization styles
 - Low, medium, and high waveform density, including smooth-to-detailed classic waves
 - Export progress indicator and optional 3, 5, or 10 second countdown
-- 1920×1080, 30 fps MP4 or MOV with H.264/AAC
+- Full HD (1920×1080) or 4K UHD (3840×2160), 30 fps MP4 or MOV with H.264/AAC
 - Full-interface video export using the actual app layout, icons, controls, individual track colors/names, and separate mono/stereo waveforms
 - Animated timeline playhead, clock, and per-track audio meters, with synchronized session audio
 - Audio follows track start times, mute/solo, gain, pan, and master volume
@@ -47,7 +47,7 @@ npm start
 
 Uploads are streamed into `data/uploads/<uuid>`. The server inspects each file and generates a playback proxy plus compact waveform peaks for each channel. Canvas renders track lanes, while Web Audio schedules decoded audio against one shared clock.
 
-Video export opens the same Studio component in a fresh headless browser, fits the whole interface into a 1920×1080 frame, and renders each frame at an exact 30 fps timestamp. Audio-derived meter values, the clock, and the playhead follow that timestamp. FFmpeg encodes the frames with the audible session audio. Every export gets its own output directory; the temporary render-page data is removed after rendering. No screen-sharing permission or recording of the user's desktop is needed.
+Video export opens the same Studio component in a fresh headless browser, fits the whole interface into a 1920×1080 layout, and renders each frame at an exact 30 fps timestamp. Choose Full HD or 4K in the export dialog. Full HD uses 1× pixel density; 4K uses 2× density to draw text, icons, and waveform canvases directly at 3840×2160 while preserving the layout. Audio-derived meter values, the clock, and the playhead follow that timestamp. FFmpeg encodes the frames with the audible session audio. Every export gets its own output directory; the temporary render-page data is removed after rendering. No screen-sharing permission or recording of the user's desktop is needed.
 
 The renderer connects to the local server on `PORT` (3000 by default). If your server uses a different local address, set `WAVEVO_RENDER_ORIGIN`, for example `http://127.0.0.1:3001`. Only loopback origins are accepted.
 
@@ -59,7 +59,7 @@ Generated media under `data/` is intentionally ignored by Git.
 - Export runs inside the web process and the request stays open until FFmpeg finishes. A production deployment should use an external job queue/worker and object storage.
 - There are no accounts or saved projects. Refreshing the page clears the current arrangement.
 - Playback decodes tracks in browser memory; very large multitrack sessions need sufficient memory.
-- Video uses a fixed 1920×1080 frame. Larger arrangements are scaled down to include the whole interface.
+- Video uses a 16:9 frame at the selected Full HD or 4K resolution. Larger arrangements are scaled down to include the whole interface. 4K produces larger files and takes longer to render.
 - Rendering happens frame by frame and can take longer than the audio duration.
 - The local server must be deployed to a long-running Node environment; short-lived serverless functions are not appropriate for 200 MB uploads or video rendering.
 

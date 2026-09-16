@@ -41,7 +41,7 @@ function rms(pcm, from, to, channel) {
   return Math.sqrt(energy / samples);
 }
 
-test("studio video preserves the interface, separate lanes, animation, and synchronized audio", { timeout: 300000 }, async () => {
+test("Full HD and 4K studio videos preserve the interface, animation, and synchronized audio", { timeout: 300000 }, async () => {
   const temporary = await mkdtemp(path.join(tmpdir(), "wavevo-mix-test-"));
   const created = [];
   const post = (endpoint, body) => fetch(`${origin}${endpoint}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -77,7 +77,8 @@ test("studio video preserves the interface, separate lanes, animation, and synch
       const { stdout } = await exec(ffprobe.path, ["-v", "error", "-show_streams", "-show_format", "-of", "json", file]);
       const info = JSON.parse(stdout);
       const video = info.streams.find(stream => stream.codec_type === "video");
-      assert.deepEqual([video.width, video.height, video.r_frame_rate], [1920, 1080, "30/1"]);
+      const scale = body.resolution === "4k" ? 2 : 1;
+      assert.deepEqual([video.width, video.height, video.r_frame_rate], [1920 * scale, 1080 * scale, "30/1"]);
       assert.ok(info.streams.some(stream => stream.codec_type === "audio"));
       assert.ok(Math.abs(Number(info.format.duration) - duration) < 0.1);
       const artifacts = path.join(process.cwd(), "data", "test-artifacts");
@@ -89,7 +90,12 @@ test("studio video preserves the interface, separate lanes, animation, and synch
       };
       const initial = await imageAt(0.5);
       const later = await imageAt(duration - 0.5);
-      const pixel = (image, x, y) => [...image.data.subarray((y * image.width + x) * 4, (y * image.width + x) * 4 + 3)];
+      assert.deepEqual([initial.width, initial.height], [1920 * scale, 1080 * scale]);
+      // Compare identical layout positions in both physical pixel resolutions.
+      const pixel = (image, x, y) => {
+        const offset = (y * scale * image.width + x * scale) * 4;
+        return [...image.data.subarray(offset, offset + 3)];
+      };
       const distance = (a, b) => Math.max(...a.map((value, index) => Math.abs(value - b[index])));
       const background = body.videoTheme === "light" ? [232, 237, 240] : [28, 34, 40];
       const toolbar = body.videoTheme === "light" ? [247, 249, 250] : [37, 45, 52];
@@ -147,7 +153,7 @@ test("studio video preserves the interface, separate lanes, animation, and synch
 
     const solo = structuredClone(settings);
     solo.tracks[1].solo = true;
-    solo.format = "mov"; solo.countdown = 3; solo.videoTheme = "light";
+    solo.format = "mov"; solo.countdown = 3; solo.videoTheme = "light"; solo.resolution = "4k";
     const isolated = await render(solo, 6);
     assert.ok(rms(isolated, 0.2, 4.8, 0) < 0.005, "solo must exclude the first track");
     assert.ok(rms(isolated, 0.2, 4.8, 1) < 0.005, "countdown and clip offset must both delay audio");
@@ -159,6 +165,8 @@ test("studio video preserves the interface, separate lanes, animation, and synch
     assert.match((await silent.json()).error, /unmute/i);
     const invalid = await post("/api/mix-exports", { ...settings, tracks: [{ ...settings.tracks[0], start: -1 }] });
     assert.equal(invalid.status, 400, "negative track offsets must be rejected");
+    const invalidResolution = await post("/api/mix-exports", { ...settings, resolution: "8k" });
+    assert.equal(invalidResolution.status, 400, "unsupported resolutions must be rejected");
   } finally {
     await rm(temporary, { recursive: true, force: true });
     // Only remove upload/export IDs created by this test run.

@@ -32,6 +32,7 @@ export type ExportSettings = {
 export type VideoFormat = "mp4" | "mov";
 
 export type StudioRenderSession = {
+  sessionName: string;
   tracks: Array<SessionTrack & { meterPeaks: number[] }>;
   settings: ExportSettings;
   masterVolume: number;

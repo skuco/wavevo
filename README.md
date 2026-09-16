@@ -18,6 +18,7 @@ Wavevo is a multitrack audio and video studio. Arrange WAV, MP3, and FLAC tracks
 - Low, medium, and high waveform density, including smooth-to-detailed classic waves
 - Export progress indicator and optional 3, 5, or 10 second countdown
 - Full HD (1920×1080) or 4K UHD (3840×2160), 30 fps MP4 or MOV with H.264/AAC
+- High quality (default), lossless RGB video masters, or balanced exports for smaller files
 - Full-interface video export using the actual app layout, icons, controls, individual track colors/names, and separate mono/stereo waveforms
 - Animated timeline playhead, clock, and per-track audio meters, with synchronized session audio
 - Audio follows track start times, mute/solo, gain, pan, and master volume
@@ -51,6 +52,16 @@ Video export opens the same Studio component in a fresh headless browser, fits t
 
 The renderer connects to the local server on `PORT` (3000 by default). If your server uses a different local address, set `WAVEVO_RENDER_ORIGIN`, for example `http://127.0.0.1:3001`. Only loopback origins are accepted.
 
+### Export quality
+
+Resolution controls the pixel dimensions; **Video quality** controls compression:
+
+- **High quality** (default): H.264, CRF 10, medium preset, YUV 4:2:0. Less compression than the original export, with broad player support.
+- **Lossless master**: H.264 RGB, CRF 0. Preserves every rendered video pixel without color subsampling. Files are larger and require a player or editor that supports H.264 RGB / High 4:4:4 Predictive; many hardware decoders and browser players do not support this profile. Audio still uses AAC.
+- **Balanced**: the original H.264, CRF 18, veryfast preset, YUV 4:2:0 settings for smaller files and faster encoding.
+
+Use 4K with High quality for everyday playback, or Lossless master to retain the exact rendered image. Compression settings cannot enlarge tiny text in a large arrangement: fitting many tracks into one frame scales down the interface. A player that scales the video to a smaller window or a service that re-encodes an upload can also affect perceived sharpness.
+
 Generated media under `data/` is intentionally ignored by Git.
 
 ## PoC limitations
@@ -70,4 +81,4 @@ npm run typecheck
 npm run build
 ```
 
-With the development server running on `127.0.0.1:3000`, run `npm run test:integration` to verify real uploads and MP4/MOV downloads, the actual studio design, separate colored lanes, animated clock/playhead/meters, stereo audio, offsets, gain, pan, mute/solo, countdowns, and validation. The test removes its own audio/video fixtures and saves video-frame images under `data/test-artifacts/` for visual inspection.
+With the development server running on `127.0.0.1:3000`, run `npm run test:integration` to verify real uploads and MP4/MOV downloads, Full HD and 4K, all three quality presets, exact lossless video pixels, the actual studio design, separate colored lanes, animated clock/playhead/meters, stereo audio, offsets, gain, pan, mute/solo, countdowns, and validation. The test removes its own audio/video fixtures and saves video-frame images under `data/test-artifacts/` for visual inspection.

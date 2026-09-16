@@ -5,6 +5,7 @@ import { chromium } from "playwright-core";
 import ffmpeg from "ffmpeg-static";
 import type { ExportSettings, VideoFormat } from "@/lib/types";
 import { VIDEO_RESOLUTIONS, type VideoResolution } from "@/lib/video-resolution";
+import { VIDEO_QUALITIES, type VideoQuality } from "@/lib/video-quality";
 
 async function browserPath() {
   const candidates = [
@@ -34,7 +35,7 @@ function renderOrigin() {
 
 // Render the actual Studio component at each video timestamp. This keeps its
 // canvas waveforms, CSS, icons, clock, playhead, and meters identical to the app.
-export async function createStudioVideo(id: string, audioPath: string, outputPath: string, duration: number, settings: ExportSettings, format: VideoFormat, resolution: VideoResolution = "1080p") {
+export async function createStudioVideo(id: string, audioPath: string, outputPath: string, duration: number, settings: ExportSettings, format: VideoFormat, resolution: VideoResolution = "1080p", quality: VideoQuality = "high") {
   if (!ffmpeg) throw new Error("FFmpeg is unavailable.");
   const origin = renderOrigin();
   const browser = await chromium.launch({ executablePath: await browserPath(), headless: true, chromiumSandbox: true });
@@ -57,10 +58,11 @@ export async function createStudioVideo(id: string, audioPath: string, outputPat
     });
 
     const totalDuration = duration + settings.countdown;
+    const profile = VIDEO_QUALITIES[quality];
     const encoder = spawn(ffmpeg, [
       "-y", "-v", "error", "-f", "image2pipe", "-framerate", "30", "-i", "pipe:0", "-i", audioPath,
       "-map", "0:v", "-map", "1:a", "-af", settings.countdown ? `adelay=${settings.countdown * 1000}:all=1` : "anull",
-      "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
+      "-c:v", profile.encoder, "-preset", profile.preset, "-crf", profile.crf, "-pix_fmt", profile.pixelFormat,
       "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-t", totalDuration.toFixed(3), "-f", format, outputPath,
     ], { stdio: ["pipe", "ignore", "pipe"] });
     let error = "";

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
@@ -68,7 +68,8 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
       const response = await post("/api/mix-exports", body);
       const result = await response.json();
       assert.equal(response.status, 200, JSON.stringify(result));
-      created.push(result.downloadUrl.split("/")[3].split("?")[0]);
+      const exportId = result.downloadUrl.split("/")[3].split("?")[0];
+      created.push(exportId);
       const download = await fetch(`${origin}${result.downloadUrl}`);
       assert.equal(download.status, 200);
       assert.ok(download.headers.get("content-disposition").includes("attachment"));
@@ -79,15 +80,22 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
       const video = info.streams.find(stream => stream.codec_type === "video");
       const scale = body.resolution === "4k" ? 2 : 1;
       assert.deepEqual([video.width, video.height, video.r_frame_rate], [1920 * scale, 1080 * scale, "30/1"]);
+      assert.equal(video.pix_fmt, body.quality === "lossless" ? "gbrp" : "yuv420p");
       assert.ok(info.streams.some(stream => stream.codec_type === "audio"));
       assert.ok(Math.abs(Number(info.format.duration) - duration) < 0.1);
       const artifacts = path.join(process.cwd(), "data", "test-artifacts");
       await mkdir(artifacts, { recursive: true });
       const imageAt = async time => {
         const image = await exec(ffmpeg, ["-v", "error", "-ss", String(time), "-i", file, "-frames:v", "1", "-f", "image2pipe", "-c:v", "png", "pipe:1"], { encoding: "buffer", maxBuffer: 4 * 1024 * 1024 });
-        await writeFile(path.join(artifacts, `studio-${body.format}-${time}.png`), image.stdout);
+        await writeFile(path.join(artifacts, `studio-${body.resolution || "1080p"}-${body.quality || "high"}-${body.format}-${time}.png`), image.stdout);
         return PNG.sync.read(image.stdout);
       };
+      if (body.quality === "lossless") {
+        const original = PNG.sync.read(await readFile(path.join(process.cwd(), "data", "uploads", exportId, "studio-frame.png")));
+        const decoded = await imageAt(0);
+        assert.deepEqual([decoded.width, decoded.height], [original.width, original.height]);
+        assert.ok(decoded.data.equals(original.data), "lossless master must preserve every pixel of the source browser frame, including colored text and edges");
+      }
       const initial = await imageAt(0.5);
       const later = await imageAt(duration - 0.5);
       assert.deepEqual([initial.width, initial.height], [1920 * scale, 1080 * scale]);
@@ -153,11 +161,14 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
 
     const solo = structuredClone(settings);
     solo.tracks[1].solo = true;
-    solo.format = "mov"; solo.countdown = 3; solo.videoTheme = "light"; solo.resolution = "4k";
+    solo.format = "mov"; solo.countdown = 3; solo.videoTheme = "light"; solo.resolution = "4k"; solo.quality = "balanced";
     const isolated = await render(solo, 6);
     assert.ok(rms(isolated, 0.2, 4.8, 0) < 0.005, "solo must exclude the first track");
     assert.ok(rms(isolated, 0.2, 4.8, 1) < 0.005, "countdown and clip offset must both delay audio");
     assert.ok(rms(isolated, 5.2, 5.8, 1) > 0.05);
+
+    const master = await render({ ...settings, resolution: "4k", quality: "lossless", format: "mov" }, 3);
+    assert.ok(rms(master, 0.2, 0.8, 0) > 0.1, "lossless video must retain the session audio");
 
     solo.tracks[1].muted = true;
     const silent = await post("/api/mix-exports", solo);
@@ -167,6 +178,8 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
     assert.equal(invalid.status, 400, "negative track offsets must be rejected");
     const invalidResolution = await post("/api/mix-exports", { ...settings, resolution: "8k" });
     assert.equal(invalidResolution.status, 400, "unsupported resolutions must be rejected");
+    const invalidQuality = await post("/api/mix-exports", { ...settings, quality: "unknown" });
+    assert.equal(invalidQuality.status, 400, "unsupported quality presets must be rejected");
   } finally {
     await rm(temporary, { recursive: true, force: true });
     // Only remove upload/export IDs created by this test run.

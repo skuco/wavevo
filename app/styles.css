@@ -50,8 +50,7 @@ svg { flex-shrink: 0; vertical-align: middle; }
 .brand-mark { display: grid; place-items: center; width: 31px; height: 31px; margin-right: 10px; border-radius: 8px; background: var(--accent); color: var(--accent-dark); }
 .brand-dot { color: var(--accent); }
 .header-divider { height: 23px; width: 1px; background: var(--line); }
-.workspace-label { font-size: 12px; font-weight: 500; color: var(--muted); display: flex; align-items: center; gap: 13px; }
-.workspace-label > span { font-size: 10px; padding: 4px 7px; background: var(--surface-raised); border: 1px solid var(--line); border-radius: 4px; color: var(--muted); }
+.workspace-label { font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; }
 .header-actions { display: flex; align-items: center; gap: 18px; margin-left: auto; }
 .session-tag { color: var(--muted); display: flex; align-items: center; gap: 7px; font-size: 11px; }
 .session-tag i { width: 5px; height: 5px; background: var(--accent); border-radius: 50%; }
@@ -238,6 +237,7 @@ html[data-theme="light"] .error-banner { color: #98351d; }
 .export-fields .export-progress { flex-direction: row; align-items: center; justify-content: space-between; align-self: end; height: 38px; }
 .export-dialog .export-note { font-size: 10px; margin: 22px 0; }
 .export-dialog .export-resolution-note { font-size: 10px; margin: 16px 0 0; }
+.export-dialog .export-quality-note { font-size: 11px; margin: 16px 0 0; }
 .dialog-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 21px; border-top: 1px solid var(--line); }
 .export-dialog .dialog-error { color: #e69a88; }
 .export-dialog .render-status { font-size: 10px; text-align: center; margin-bottom: 0; }

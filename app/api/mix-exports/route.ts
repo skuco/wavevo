@@ -29,6 +29,7 @@ const schema = z.object({
   videoTheme: z.enum(["dark", "light"]),
   format: z.enum(["mp4", "mov"]),
   resolution: z.enum(["1080p", "4k"]).default("1080p"),
+  quality: z.enum(["high", "lossless", "balanced"]).default("high"),
   view: z.object({ selectedId: z.string().uuid().or(z.literal("")).default(""), compact: z.boolean().default(false), loop: z.boolean().default(false), snap: z.boolean().default(false), snapInterval: z.union([z.literal(1), z.literal(0.5), z.literal(0.1)]).default(1) }).default({ selectedId: "", compact: false, loop: false, snap: false, snapInterval: 1 }),
 });
 
@@ -71,8 +72,8 @@ export async function POST(request: Request) {
     const session: StudioRenderSession = { sessionName: settings.sessionName, tracks, settings, masterVolume: settings.masterVolume, ...settings.view };
     await writeFile(path.join(directory, "studio.json"), JSON.stringify(session));
     const { width, height } = VIDEO_RESOLUTIONS[settings.resolution];
-    await writeFile(path.join(directory, "metadata.json"), JSON.stringify({ name: settings.sessionName, sessionName: settings.sessionName, duration, resolution: settings.resolution, width, height }));
-    await createStudioVideo(id, mixPath, path.join(directory, `export.${settings.format}`), duration, settings, settings.format, settings.resolution);
+    await writeFile(path.join(directory, "metadata.json"), JSON.stringify({ name: settings.sessionName, sessionName: settings.sessionName, duration, resolution: settings.resolution, quality: settings.quality, width, height }));
+    await createStudioVideo(id, mixPath, path.join(directory, `export.${settings.format}`), duration, settings, settings.format, settings.resolution, settings.quality);
     await rm(path.join(directory, "studio.json"));
     return Response.json({ downloadUrl: `/api/exports/${id}?format=${settings.format}` });
   } catch (caught) {

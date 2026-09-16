@@ -8,6 +8,7 @@ import { Waveform } from "./waveform";
 import { useTransport } from "./use-transport";
 import { formatTime } from "@/lib/format";
 import { VIDEO_RESOLUTIONS, type VideoResolution } from "@/lib/video-resolution";
+import { VIDEO_QUALITIES, type VideoQuality } from "@/lib/video-quality";
 import type { ExportSettings, SessionTrack, StudioRenderSession, VideoFormat, WaveformDensity, WaveformStyle } from "@/lib/types";
 
 const COLORS = ["#18c9a7", "#26c4db", "#ac89f5", "#efad64", "#ed88ad", "#8bca76"];
@@ -174,7 +175,7 @@ export default function Studio({ renderSession }: { renderSession?: StudioRender
       <header className="app-header">
         <a className="brand" href="/" aria-label="Wavevo home"><span className="brand-mark"><Icon name="wave" size={22} /></span>wavevo<span className="brand-dot">.</span></a>
         <span className="header-divider" />
-        <div className="workspace-label">Audio studio <span>Multitrack</span></div>
+        <div className="workspace-label">Make some waves.</div>
         <div className="header-actions"><span className="session-tag"><i /> Local session</span><button className="icon-button theme-button" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} title="Change theme"><Icon name={theme === "dark" ? "sun" : "moon"} /></button><button className="primary-button" onClick={() => { transport.pause(); setExportOpen(true); }} disabled={!audible.length || !!uploading}><Icon name="download" size={16} /> Export video</button></div>
       </header>
 
@@ -264,6 +265,7 @@ function ExportDialog({ sessionName, tracks, masterVolume, settings, onSettings,
   const ref = useRef<HTMLDialogElement>(null);
   const [format, setFormat] = useState<VideoFormat>("mp4");
   const [resolution, setResolution] = useState<VideoResolution>("1080p");
+  const [quality, setQuality] = useState<VideoQuality>("high");
   const dimensions = VIDEO_RESOLUTIONS[resolution];
   const [videoTheme, setVideoTheme] = useState(editorTheme);
   const [exporting, setExporting] = useState(false);
@@ -277,7 +279,7 @@ function ExportDialog({ sessionName, tracks, masterVolume, settings, onSettings,
   const render = async () => {
     setExporting(true); setError(""); setDownload("");
     try {
-      const response = await fetch("/api/mix-exports", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionName, tracks: tracks.map(({ id, name, color, volume, pan, muted, solo, start }) => ({ uploadId: id, name, color, volume, pan, muted, solo, start })), masterVolume, ...settings, videoTheme, format, resolution, view }) });
+      const response = await fetch("/api/mix-exports", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionName, tracks: tracks.map(({ id, name, color, volume, pan, muted, solo, start }) => ({ uploadId: id, name, color, volume, pan, muted, solo, start })), masterVolume, ...settings, videoTheme, format, resolution, quality, view }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Export failed.");
       setDownload(payload.downloadUrl);
@@ -290,10 +292,12 @@ function ExportDialog({ sessionName, tracks, masterVolume, settings, onSettings,
     <fieldset disabled={exporting} className="export-fields">
       <label>Video format<select value={format} onChange={event => { setFormat(event.target.value as VideoFormat); setDownload(""); }}><option value="mp4">MP4 · H.264 / AAC</option><option value="mov">MOV · H.264 / AAC</option></select></label>
       <label>Resolution<select value={resolution} onChange={event => { setResolution(event.target.value as VideoResolution); setDownload(""); }}>{Object.entries(VIDEO_RESOLUTIONS).map(([value, size]) => <option key={value} value={value}>{size.label} · {size.width} × {size.height}</option>)}</select></label>
+      <label>Video quality<select value={quality} aria-describedby="export-quality-help" onChange={event => { setQuality(event.target.value as VideoQuality); setDownload(""); }}>{Object.entries(VIDEO_QUALITIES).map(([value, profile]) => <option key={value} value={value}>{profile.label}</option>)}</select></label>
       <label>Interface theme<select value={videoTheme} onChange={event => { setVideoTheme(event.target.value); setDownload(""); }}><option value="dark">Dark</option><option value="light">Light</option></select></label>
       <label>Countdown<select value={settings.countdown} onChange={event => changeSettings({ countdown: Number(event.target.value) as ExportSettings["countdown"] })}><option value={0}>None</option><option value={3}>3 seconds</option><option value={5}>5 seconds</option><option value={10}>10 seconds</option></select></label>
       <label className="export-progress">Moving playhead<input type="checkbox" checked={settings.showProgress} onChange={event => changeSettings({ showProgress: event.target.checked })} /></label>
     </fieldset>
+    <p id="export-quality-help" className="export-quality-note" aria-live="polite">{VIDEO_QUALITIES[quality].description}</p>
     {resolution === "4k" && <p className="export-resolution-note">4K gives you sharper detail with larger files and longer render times.</p>}
     <p className="export-note">Includes every track lane, its color and name, the timeline, controls, clock, and live meters. The full session fits in the frame; your audio follows the track and master settings.</p>
     {error && <p className="dialog-error" role="alert">{error}</p>}

@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 
 const paths = {
+  video: "M3 5h18v14H3ZM8 5v14M16 5v14M3 10h5m8 0h5M3 14h5m8 0h5",
   play: "m8 5 11 7-11 7Z",
   pause: "M8 5v14M16 5v14",
   stop: "M6 6h12v12H6Z",

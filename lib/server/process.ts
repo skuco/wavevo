@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 
-export async function runProcess(command: string, args: string[], options?: { captureStdout?: boolean }) {
+export async function runProcess(command: string, args: string[], options?: { captureStdout?: boolean; signal?: AbortSignal }) {
   return new Promise<Buffer>((resolve, reject) => {
-    const process = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const process = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"], signal: options?.signal });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     process.stdout.on("data", (chunk: Buffer) => options?.captureStdout && stdout.push(chunk));

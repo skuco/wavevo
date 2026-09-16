@@ -16,18 +16,18 @@ export function panFilter(pan: number, channels: number) {
     : `pan=stereo|c0=${Math.cos(angle).toFixed(8)}*c0|c1=c1+${Math.sin(angle).toFixed(8)}*c0`;
 }
 
-export async function createAudioMix(inputs: MixInput[], outputPath: string, duration: number, masterVolume: number) {
+export async function createAudioMix(inputs: MixInput[], outputPath: string, duration: number, masterVolume: number, signal?: AbortSignal) {
   if (!ffmpegPath) throw new Error("FFmpeg is unavailable.");
   const filters = inputs.map((input, index) => `[${index}:a]${panFilter(input.pan, input.channels)},volume=${input.volume * masterVolume},adelay=${Math.round(input.start * 1000)}:all=1[a${index}]`);
   filters.push(`${inputs.map((_, index) => `[a${index}]`).join("")}amix=inputs=${inputs.length}:duration=longest:normalize=0,apad,atrim=duration=${duration}[mix]`);
-  await runProcess(ffmpegPath, ["-y", "-v", "error", ...inputs.flatMap(input => ["-i", input.path]), "-filter_complex", filters.join(";"), "-map", "[mix]", "-ar", "44100", "-c:a", "pcm_s16le", outputPath]);
+  await runProcess(ffmpegPath, ["-y", "-v", "error", ...inputs.flatMap(input => ["-i", input.path]), "-filter_complex", filters.join(";"), "-map", "[mix]", "-ar", "44100", "-c:a", "pcm_s16le", outputPath], { signal });
 }
 
-export async function createLevelEnvelope(input: MixInput) {
+export async function createLevelEnvelope(input: MixInput, signal?: AbortSignal) {
   if (!ffmpegPath) throw new Error("FFmpeg is unavailable.");
   const binary = ffmpegPath;
   return new Promise<number[]>((resolve, reject) => {
-    const process = spawn(binary, ["-v", "error", "-i", input.path, "-af", `${panFilter(input.pan, input.channels)},volume=${input.volume}`, "-ar", "8000", "-ac", "2", "-f", "f32le", "pipe:1"], { stdio: ["ignore", "pipe", "pipe"] });
+    const process = spawn(binary, ["-v", "error", "-i", input.path, "-af", `${panFilter(input.pan, input.channels)},volume=${input.volume}`, "-ar", "8000", "-ac", "2", "-f", "f32le", "pipe:1"], { stdio: ["ignore", "pipe", "pipe"], signal });
     const levels: number[] = [];
     let remainder = Buffer.alloc(0);
     let frame = 0;

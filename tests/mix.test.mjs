@@ -1,4 +1,6 @@
 import test from "node:test";
+import { DatabaseSync } from "node:sqlite";
+import { setTimeout as delay } from "node:timers/promises";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -64,12 +66,37 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
       waveformStyle: "wave", waveformDensity: "high", videoTheme: "dark", format: "mp4",
     };
 
-    const render = async (body, duration) => {
+    const queue = async body => {
       const response = await post("/api/mix-exports", body);
       const result = await response.json();
-      assert.equal(response.status, 200, JSON.stringify(result));
-      const exportId = result.downloadUrl.split("/")[3].split("?")[0];
-      created.push(exportId);
+      assert.equal(response.status, 202, JSON.stringify(result));
+      assert.equal(result.job.status, "queued", "request returns before rendering begins");
+      assert.equal(result.job.downloadUrl, null, "partial video cannot be downloaded");
+      created.push(result.job.id);
+      return result.job;
+    };
+    const render = async (body, duration, queued) => {
+      let job = queued || await queue(body);
+      const exportId = job.id;
+      let progress = 0;
+      const deadline = Date.now() + 240000;
+      const seen = new Set();
+      while (job.status !== "completed") {
+        assert.notEqual(job.status, "failed", job.error || "Render failed");
+        assert.ok(Date.now() < deadline, "render timed out");
+        await delay(300);
+        const response = await fetch(`${origin}/api/render-jobs/${exportId}`);
+        assert.equal(response.status, 200);
+        job = (await response.json()).job;
+        assert.ok(job.progress >= progress, "progress must be monotonic");
+        progress = job.progress;
+        if (job.status === "running") seen.add(job.progress);
+      }
+      assert.equal(job.progress, 100);
+      assert.ok(seen.size > 1, "worker reports actual progress while rendering");
+      const history = await (await fetch(`${origin}/api/render-jobs`)).json();
+      assert.equal(history.jobs.find(item => item.id === exportId)?.status, "completed");
+      const result = job;
       const download = await fetch(`${origin}${result.downloadUrl}`);
       assert.equal(download.status, 200);
       assert.ok(download.headers.get("content-disposition").includes("attachment"));
@@ -150,7 +177,16 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
       return audio.stdout;
     };
 
-    const mix = await render(settings, 3);
+    // Queue two snapshots without waiting. HTTP stays available and one worker drains them in order.
+    const queued = await queue(settings);
+    const solo = structuredClone(settings);
+    solo.tracks[1].solo = true;
+    solo.format = "mov"; solo.countdown = 3; solo.videoTheme = "light"; solo.resolution = "4k"; solo.quality = "balanced";
+    const queuedSolo = await queue(solo);
+    assert.equal((await fetch(`${origin}/`)).status, 200, "the editor remains available during rendering");
+    const initialHistory = await (await fetch(`${origin}/api/render-jobs`)).json();
+    assert.ok(initialHistory.jobs.filter(job => job.status === "running").length <= 1);
+    const mix = await render(settings, 3, queued);
     assert.ok(rms(mix, 0.2, 0.8, 0) > 0.1, "first track must be audible on the left");
     assert.ok(rms(mix, 0.2, 0.8, 1) < 0.005, "right channel must wait for delayed track");
     assert.ok(rms(mix, 2.2, 2.8, 0) < 0.005, "shorter track must end");
@@ -159,10 +195,7 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
     const expected = 9000 / 32768 / Math.sqrt(2) * 0.5 * 0.8;
     assert.ok(Math.abs(rms(mix, 2.2, 2.8, 1) - expected) < 0.015, "export must preserve track and master gain");
 
-    const solo = structuredClone(settings);
-    solo.tracks[1].solo = true;
-    solo.format = "mov"; solo.countdown = 3; solo.videoTheme = "light"; solo.resolution = "4k"; solo.quality = "balanced";
-    const isolated = await render(solo, 6);
+    const isolated = await render(solo, 6, queuedSolo);
     assert.ok(rms(isolated, 0.2, 4.8, 0) < 0.005, "solo must exclude the first track");
     assert.ok(rms(isolated, 0.2, 4.8, 1) < 0.005, "countdown and clip offset must both delay audio");
     assert.ok(rms(isolated, 5.2, 5.8, 1) > 0.05);
@@ -183,9 +216,12 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
   } finally {
     await rm(temporary, { recursive: true, force: true });
     // Only remove upload/export IDs created by this test run.
+    const jobs = new DatabaseSync(path.join(process.cwd(), "data", "renders.sqlite"));
     for (const id of created) {
       assert.match(id, /^[0-9a-f-]{36}$/);
+      jobs.prepare("DELETE FROM render_jobs WHERE id = ?").run(id);
       await rm(path.join(process.cwd(), "data", "uploads", id), { recursive: true, force: true });
     }
+    jobs.close();
   }
 });

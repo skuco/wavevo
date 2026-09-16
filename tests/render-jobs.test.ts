@@ -1,0 +1,54 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { RenderJobStore } from "../lib/server/render-jobs";
+import { exportSchema } from "../lib/server/export-settings";
+
+test("durable queue preserves snapshots, serializes workers, and recovers interruptions", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "wavevo-jobs-"));
+  const filename = path.join(directory, "jobs.sqlite");
+  let first = new RenderJobStore(filename);
+  const second = new RenderJobStore(filename);
+  try {
+    const settings = exportSchema.parse({ sessionName: "Original session", tracks: [{ uploadId: "2b6c095f-42d0-4bad-868a-cfdfd4eebbbb", name: "Bass", volume: 1, pan: 0, start: 0, muted: false, solo: false }], masterVolume: 0.8, color: "#18c9a7", showProgress: true, countdown: 0, waveformStyle: "wave", waveformDensity: "high", videoTheme: "dark", format: "mp4" });
+    const job = first.enqueue(settings, 3);
+    settings.sessionName = "Later edits";
+    settings.tracks[0].volume = 0;
+    const next = first.enqueue(settings, 3);
+    first.close();
+    first = new RenderJobStore(filename);
+    assert.equal(first.list().length, 2, "history survives reopening the database");
+    const claimed = first.claim("worker-a")!;
+    assert.equal(claimed.id, job.id, "oldest render is first");
+    assert.equal(claimed.settings.sessionName, "Original session");
+    assert.equal(claimed.settings.tracks[0].volume, 1, "editing a session cannot mutate its queued snapshot");
+    assert.equal(second.claim("worker-b"), undefined, "a second process cannot render concurrently");
+    first.progress(job.id, "worker-a", 45, "Rendering frames");
+    first.progress(job.id, "worker-a", 20, "Rendering frames");
+    assert.equal(second.get(job.id)?.progress, 45, "progress cannot move backwards");
+    second.complete(job.id, "worker-b", 123);
+    assert.equal(first.get(job.id)?.status, "running", "only the owning worker can complete a job");
+    first.complete(job.id, "worker-a", 1234);
+    assert.equal(second.get(job.id)?.progress, 100);
+    assert.equal(second.get(job.id)?.downloadUrl, `/api/exports/${job.id}?format=mp4`);
+    assert.equal(second.claim("worker-b", Date.now() - 120_000)?.id, next.id);
+    assert.equal(first.claim("worker-c"), undefined);
+    assert.equal(second.get(next.id)?.status, "failed", "dead worker leaves a visible, retryable failure");
+    assert.equal(second.heartbeat(next.id, "worker-b"), false);
+    second.complete(next.id, "worker-b", 99);
+    assert.equal(second.get(next.id)?.status, "failed", "expired workers cannot publish completion");
+    const retry = first.retry(next.id)!;
+    assert.equal(retry.status, "queued");
+    assert.notEqual(retry.id, next.id);
+    assert.equal(second.claim("worker-c")?.settings.sessionName, "Later edits");
+    first.fail(retry.id, "worker-c", "Example failure");
+    assert.equal(second.get(retry.id)?.error, "Example failure");
+    assert.equal(first.retry(job.id), undefined, "completed videos cannot accidentally be retried");
+    assert.ok(!("payload" in first.get(job.id)!), "public history excludes internal snapshots");
+    const legacy = { id: "06bc517b-81a3-44f9-a0eb-5f196a39b0bd", sessionName: "Previous video", duration: 2, createdAt: 1, finishedAt: 1, format: "mov" as const, resolution: null, quality: null, bytes: 500 };
+    first.importCompleted(legacy); second.importCompleted(legacy);
+    assert.equal(first.list().filter(item => item.sessionName === legacy.sessionName).length, 1, "legacy import is idempotent");
+  } finally { first.close(); second.close(); await rm(directory, { recursive: true, force: true }); }
+});

@@ -35,11 +35,15 @@ function renderOrigin() {
 
 // Render the actual Studio component at each video timestamp. This keeps its
 // canvas waveforms, CSS, icons, clock, playhead, and meters identical to the app.
-export async function createStudioVideo(id: string, audioPath: string, outputPath: string, duration: number, settings: ExportSettings, format: VideoFormat, resolution: VideoResolution = "1080p", quality: VideoQuality = "high") {
+export async function createStudioVideo(id: string, audioPath: string, outputPath: string, duration: number, settings: ExportSettings, format: VideoFormat, resolution: VideoResolution = "1080p", quality: VideoQuality = "high", onProgress?: (frames: number, total: number) => void, signal?: AbortSignal) {
   if (!ffmpeg) throw new Error("FFmpeg is unavailable.");
+  signal?.throwIfAborted();
   const origin = renderOrigin();
   const browser = await chromium.launch({ executablePath: await browserPath(), headless: true, chromiumSandbox: true });
+  const abort = () => { void browser.close().catch(() => {}); };
+  signal?.addEventListener("abort", abort, { once: true });
   try {
+    signal?.throwIfAborted();
     // Keep the same composition at both resolutions. At 2× pixel density the
     // browser rasterizes text, icons, and DPR-aware waveform canvases in native 4K.
     const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: VIDEO_RESOLUTIONS[resolution].scale, reducedMotion: "reduce" });
@@ -64,7 +68,7 @@ export async function createStudioVideo(id: string, audioPath: string, outputPat
       "-map", "0:v", "-map", "1:a", "-af", settings.countdown ? `adelay=${settings.countdown * 1000}:all=1` : "anull",
       "-c:v", profile.encoder, "-preset", profile.preset, "-crf", profile.crf, "-pix_fmt", profile.pixelFormat,
       "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-t", totalDuration.toFixed(3), "-f", format, outputPath,
-    ], { stdio: ["pipe", "ignore", "pipe"] });
+    ], { stdio: ["pipe", "ignore", "pipe"], signal });
     let error = "";
     encoder.stderr.on("data", chunk => { error = (error + chunk.toString()).slice(-8000); });
     encoder.stdin.on("error", () => { /* The write callback and completion promise report errors. */ });
@@ -76,6 +80,7 @@ export async function createStudioVideo(id: string, audioPath: string, outputPat
     void finished.catch(() => {});
     try {
       for (let frame = 0; frame < Math.ceil(totalDuration * 30); frame++) {
+        signal?.throwIfAborted();
         if (encoder.exitCode !== null) throw new Error(error || "Video encoder stopped unexpectedly.");
         const time = frame / 30 - settings.countdown;
         await page.evaluate(async time => {
@@ -85,6 +90,7 @@ export async function createStudioVideo(id: string, audioPath: string, outputPat
         const png = await page.screenshot({ type: "png", scale: "device", animations: "disabled", caret: "hide", timeout: 30000 });
         if (frame === 0) await writeFile(path.join(path.dirname(outputPath), "studio-frame.png"), png);
         await new Promise<void>((resolve, reject) => encoder.stdin.write(png, caught => caught ? reject(caught) : resolve()));
+        onProgress?.(frame + 1, Math.ceil(totalDuration * 30));
       }
       encoder.stdin.end();
       await finished;
@@ -93,5 +99,5 @@ export async function createStudioVideo(id: string, audioPath: string, outputPat
       await finished.catch(() => {});
       throw caught;
     }
-  } finally { await browser.close(); }
+  } finally { signal?.removeEventListener("abort", abort); await browser.close(); }
 }

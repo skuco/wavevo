@@ -23,10 +23,13 @@ Wavevo is a multitrack audio and video studio. Arrange WAV, MP3, and FLAC tracks
 - Animated timeline playhead, clock, and per-track audio meters, with synchronized session audio
 - Audio follows track start times, mute/solo, gain, pan, and master volume
 - Video defaults to the current editor theme, with dark and light choices
+- Background render queue with actual frame progress, completion notices, and a saved video library
+- Immutable export snapshots: continue editing or close the tab while a video renders
+- Retry failed exports; existing videos are imported into the library
 
 ## Run locally
 
-Requirements: Node.js 20 or newer. FFmpeg and ffprobe binaries are installed through the project dependencies.
+Requirements: Node.js 24 or newer (uses the built-in SQLite module). FFmpeg and ffprobe binaries are installed through the project dependencies.
 
 Interface video export also needs Google Chrome or Chromium on the server. Wavevo finds a standard local installation automatically. To use a custom installation, set `WAVEVO_CHROME_PATH` to the browser executable. Alternatively, install Chromium with `npx playwright-core install chromium`.
 
@@ -35,7 +38,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). Both `npm run dev` and `npm start` launch the web app and a separate render worker. No Redis, cloud service, or additional database installation is needed.
 
 For a production build:
 
@@ -52,6 +55,18 @@ Video export opens the same Studio component in a fresh headless browser, fits t
 
 The renderer connects to the local server on `PORT` (3000 by default). If your server uses a different local address, set `WAVEVO_RENDER_ORIGIN`, for example `http://127.0.0.1:3001`. Only loopback origins are accepted.
 
+### Background rendering
+
+Choose **Export video → Render in background**. The API saves a snapshot of your arrangement and settings and immediately returns a queued job. The dialog closes, so playback and editing remain available. The strip under the header shows its stage and percentage; **Videos** opens the queue and completed downloads. Progress uses audio preparation stages and actual rendered frame counts, reaching 100% only after encoding and saving finish.
+
+Jobs and history are stored in `data/renders.sqlite`; videos remain in `data/uploads/<uuid>`. The worker imports videos created by the previous exporter when it starts. Rendering is sequential to limit CPU and memory pressure. Changes to the editor cannot change a submitted export. The browser may close, but the server and worker must stay running and the computer must remain awake.
+
+Queued jobs survive restarts. An interrupted in-progress render becomes a failed entry after its 60-second worker lease expires, with **Retry render** available. Retrying creates a new job from the saved settings. Partial video files never appear as completed downloads. A successful render removes its temporary mix and render-page data.
+
+For separate process supervision, use `npm run dev:web` (or `npm run start:web`) and `npm run worker` in separate terminals. Set the same `PORT` in both environments, or set `WAVEVO_RENDER_ORIGIN` for the worker. The combined launcher forwards `--port` / `-p` to both processes. Restart the worker after changing server rendering code.
+
+Background jobs free the editor and avoid long HTTP requests; they do not speed up frame generation itself. Hardware encoding and a more efficient frame compositor remain separate optimizations.
+
 ### Export quality
 
 Resolution controls the pixel dimensions; **Video quality** controls compression:
@@ -67,7 +82,7 @@ Generated media under `data/` is intentionally ignored by Git.
 ## PoC limitations
 
 - Files and exports live on the local filesystem and are not automatically expired yet.
-- Export runs inside the web process and the request stays open until FFmpeg finishes. A production deployment should use an external job queue/worker and object storage.
+- The queue and library are shared by this local installation. There are no user accounts or per-user access controls; multi-user hosting needs authentication, storage isolation, and object storage.
 - There are no accounts or saved projects. Refreshing the page clears the current arrangement.
 - Playback decodes tracks in browser memory; very large multitrack sessions need sufficient memory.
 - Video uses a 16:9 frame at the selected Full HD or 4K resolution. Larger arrangements are scaled down to include the whole interface. 4K produces larger files and takes longer to render.
@@ -78,7 +93,8 @@ Generated media under `data/` is intentionally ignored by Git.
 
 ```bash
 npm run typecheck
+npm run test:jobs
 npm run build
 ```
 
-With the development server running on `127.0.0.1:3000`, run `npm run test:integration` to verify real uploads and MP4/MOV downloads, Full HD and 4K, all three quality presets, exact lossless video pixels, the actual studio design, separate colored lanes, animated clock/playhead/meters, stereo audio, offsets, gain, pan, mute/solo, countdowns, and validation. The test removes its own audio/video fixtures and saves video-frame images under `data/test-artifacts/` for visual inspection.
+With the development server running on `127.0.0.1:3000`, run `npm run test:integration` to verify background submission, sequential rendering, saved job history, real progress, real uploads and MP4/MOV downloads, Full HD and 4K, all three quality presets, exact lossless video pixels, the actual studio design, separate colored lanes, animated clock/playhead/meters, stereo audio, offsets, gain, pan, mute/solo, countdowns, and validation. The test removes its own audio/video fixtures and saves video-frame images under `data/test-artifacts/` for visual inspection.

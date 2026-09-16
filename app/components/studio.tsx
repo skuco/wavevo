@@ -36,6 +36,8 @@ export default function Studio({ renderSession }: { renderSession?: StudioRender
   const [snapInterval, setSnapInterval] = useState(renderSession?.snapInterval || 1);
   const [zoom, setZoom] = useState(1);
   const [compact, setCompact] = useState(renderSession?.compact || false);
+  const [fillScreen, setFillScreen] = useState(renderSession?.fillScreen || false);
+  const [fillTrackHeight, setFillTrackHeight] = useState(135);
   const [masterVolume, setMasterVolume] = useState(renderSession?.masterVolume ?? 0.8);
   const [settings, setSettings] = useState<ExportSettings>(renderSession?.settings || { showProgress: true, countdown: 0, waveformStyle: "wave", waveformDensity: "high", videoTheme: "dark" });
   const [exportOpen, setExportOpen] = useState(false);
@@ -43,6 +45,7 @@ export default function Studio({ renderSession }: { renderSession?: StudioRender
   const renders = useRenderJobs(!renderSession);
   const [viewportWidth, setViewportWidth] = useState(1000);
   const inputRef = useRef<HTMLInputElement>(null);
+  const shellRef = useRef<HTMLElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const uploadLock = useRef(false);
   const tracksRef = useRef(tracks);
@@ -90,11 +93,25 @@ export default function Studio({ renderSession }: { renderSession?: StudioRender
   }, [renderSession]);
 
   useEffect(() => {
-    if (!viewportRef.current) return;
-    const observer = new ResizeObserver(([entry]) => setViewportWidth(entry.contentRect.width));
-    observer.observe(viewportRef.current);
-    return () => observer.disconnect();
-  }, []);
+    const viewport = viewportRef.current;
+    const shell = shellRef.current;
+    if (!viewport || !shell) return;
+    const resize = () => {
+      setViewportWidth(viewport.clientWidth);
+      if (!fillScreen || !tracks.length) return;
+      // Subtract the surrounding controls, ruler and scrollbar from the viewport.
+      // Keeping a readable minimum lets larger sessions scroll naturally.
+      const controlsHeight = shell.getBoundingClientRect().height - viewport.clientHeight;
+      const available = window.innerHeight - controlsHeight - 49;
+      setFillTrackHeight(Math.max(135, Math.floor(available / tracks.length * 2) / 2));
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(viewport);
+    observer.observe(shell);
+    window.addEventListener("resize", resize);
+    resize();
+    return () => { observer.disconnect(); window.removeEventListener("resize", resize); };
+  }, [fillScreen, tracks.length]);
 
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
@@ -169,7 +186,8 @@ export default function Studio({ renderSession }: { renderSession?: StudioRender
   };
 
   return (
-    <main className={`studio-shell ${compact ? "compact" : ""} ${renderSession ? "studio-render" : ""}`}
+    <main ref={shellRef} className={`studio-shell ${compact ? "compact" : ""} ${fillScreen && tracks.length ? "fill-screen" : ""} ${renderSession ? "studio-render" : ""}`}
+      style={{ "--fill-track-height": `${fillTrackHeight}px` } as CSSProperties}
       onDragEnter={event => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); dragDepth.current++; setDragging(true); } }}
       onDragOver={event => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
       onDragLeave={event => { event.preventDefault(); dragDepth.current--; if (dragDepth.current <= 0) setDragging(false); }}
@@ -203,7 +221,16 @@ export default function Studio({ renderSession }: { renderSession?: StudioRender
         <div className="zoom-controls"><button className="icon-button" disabled={zoom <= 1} onClick={() => setZoom(Math.max(1, zoom / 1.5))} aria-label="Zoom out" title="Zoom out"><Icon name="zoomOut" /></button><span>{Math.round(zoom * 100)}%</span><button className="icon-button" disabled={zoom >= 8} onClick={() => setZoom(Math.min(8, zoom * 1.5))} aria-label="Zoom in" title="Zoom in"><Icon name="zoomIn" /></button><button className="icon-button" onClick={() => { setZoom(1); if (viewportRef.current) viewportRef.current.scrollLeft = 0; }} aria-label="Fit session to view" title="Fit session"><Icon name="fit" /></button></div>
       </section>
 
-      <section className="session-heading"><div><SessionTitle value={sessionName} onChange={setSessionName} readOnly={!!renderSession} /><span>{tracks.length} {tracks.length === 1 ? "track" : "tracks"}<b>·</b>{formatTime(transport.duration)} duration</span></div><div className="session-heading-actions"><span className="timeline-hint">Drag a clip header to move it</span><button className={`icon-button ${compact ? "active" : ""}`} onClick={() => setCompact(!compact)} aria-label="Compact track height" aria-pressed={compact} title="Compact tracks"><Icon name="grid" size={16} /></button></div></section>
+      <section className="session-heading">
+        <div><SessionTitle value={sessionName} onChange={setSessionName} readOnly={!!renderSession} /><span>{tracks.length} {tracks.length === 1 ? "track" : "tracks"}<b>·</b>{formatTime(transport.duration)} duration</span></div>
+        <div className="session-heading-actions">
+          <span className="timeline-hint">Drag a clip header to move it</span>
+          <button className={`icon-button fill-screen-button ${fillScreen ? "active" : ""}`} onClick={() => setFillScreen(!fillScreen)} disabled={!tracks.length && !fillScreen} aria-pressed={fillScreen} title={fillScreen ? "Restore normal track heights" : "Spread all waveforms evenly to fill the screen vertically"}>
+            <Icon name="expandVertical" size={16} />Fill screen
+          </button>
+          <button className={`icon-button ${compact ? "active" : ""}`} onClick={() => setCompact(!compact)} disabled={fillScreen} aria-label="Compact track height" aria-pressed={compact} title={fillScreen ? "Turn off Fill screen to use compact tracks" : "Compact tracks"}><Icon name="grid" size={16} /></button>
+        </div>
+      </section>
 
       {(error || transport.error) && <div className="error-banner" role="alert"><span>{error || transport.error}</span><button className="icon-button" aria-label="Dismiss error" onClick={() => { setError(""); transport.clearError(); }}><Icon name="close" size={16} /></button></div>}
       {uploading && <div className="upload-status" role="status"><span className="spinner" />{uploading}</div>}
@@ -260,7 +287,7 @@ export default function Studio({ renderSession }: { renderSession?: StudioRender
       <footer className="status-bar"><span className="status-indicator"><i className={transport.playing ? "playing" : ""} />{uploading ? "Importing audio" : tracks.length && !transport.ready ? "Preparing playback" : renderSession && renderTime < 0 ? "Counting in" : transport.playing ? "Playing" : "Ready"}<span className="footer-separator">/</span>{audible.length} {audible.length === 1 ? "track" : "tracks"} audible</span><div className="keyboard-hints"><span><kbd>space</kbd> play / pause</span><span><kbd>←</kbd><kbd>→</kbd> seek</span></div><span className="footer-credit">Audio into motion<span>·</span><a href="https://www.testx.sk" target="_blank" rel="noreferrer">testx</a></span></footer>
       {dragging && <div className="drop-overlay"><Icon name="upload" size={40} /><h2>Add to your session</h2><p>Drop your audio files anywhere</p></div>}
       {libraryOpen && <RenderLibrary center={renders} onClose={() => setLibraryOpen(false)} />}
-      {exportOpen && <ExportDialog sessionName={sessionName} tracks={tracks} masterVolume={masterVolume} settings={settings} onSettings={setSettings} editorTheme={theme} view={{ selectedId: selected?.id || "", compact, loop, snap, snapInterval }} onClose={() => setExportOpen(false)} />}
+      {exportOpen && <ExportDialog sessionName={sessionName} tracks={tracks} masterVolume={masterVolume} settings={settings} onSettings={setSettings} editorTheme={theme} view={{ selectedId: selected?.id || "", compact, fillScreen, loop, snap, snapInterval }} onClose={() => setExportOpen(false)} />}
     </main>
   );
 }

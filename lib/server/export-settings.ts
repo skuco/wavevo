@@ -16,7 +16,7 @@ export const exportSchema = z.object({
   format: z.enum(["mp4", "mov"]),
   resolution: z.enum(["1080p", "4k"]).default("1080p"),
   quality: z.enum(["high", "lossless", "balanced"]).default("high"),
-  view: z.object({ selectedId: z.string().uuid().or(z.literal("")).default(""), compact: z.boolean().default(false), loop: z.boolean().default(false), snap: z.boolean().default(false), snapInterval: z.union([z.literal(1), z.literal(0.5), z.literal(0.1)]).default(1) }).default({ selectedId: "", compact: false, loop: false, snap: false, snapInterval: 1 }),
+  view: z.object({ selectedId: z.string().uuid().or(z.literal("")).default(""), compact: z.boolean().default(false), fillScreen: z.boolean().default(false), loop: z.boolean().default(false), snap: z.boolean().default(false), snapInterval: z.union([z.literal(1), z.literal(0.5), z.literal(0.1)]).default(1) }).default({ selectedId: "", compact: false, fillScreen: false, loop: false, snap: false, snapInterval: 1 }),
 });
 
 export type RenderRequest = z.infer<typeof exportSchema>;

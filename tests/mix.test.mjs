@@ -150,6 +150,20 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
       const toolbar = body.videoTheme === "light" ? [247, 249, 250] : [37, 45, 52];
       assert.ok(distance(pixel(initial, 1100, 30), background) < 8, "video must contain the actual app header");
       assert.ok(distance(pixel(initial, 1100, 100), toolbar) < 8, "video must contain the transport toolbar");
+      if (body.view?.fillScreen) {
+        const laneBounds = [[24, 201, 167], [237, 136, 173]].map(color => {
+          const rows = [];
+          for (let y = 272; y < 950; y++) {
+            let matching = 0;
+            for (let x = 310; x < 465; x++) if (distance(pixel(initial, x, y), color) < 18) matching++;
+            if (matching > 10) rows.push(y);
+          }
+          return { top: rows[0], bottom: rows.at(-1), height: rows.at(-1) - rows[0] + 1 };
+        });
+        assert.ok(laneBounds.every(lane => lane.height > 280), "Fill screen must expand both exported waveforms");
+        assert.ok(Math.abs(laneBounds[0].height - laneBounds[1].height) <= 3, "expanded lanes must share the height equally");
+        assert.ok(laneBounds[1].bottom > 920, "expanded waveforms must reach the bottom of the editor area");
+      }
       if (body.format === "mp4") {
         const colors = [[24, 201, 167], [237, 136, 173]];
         const counts = [0, 0];
@@ -214,7 +228,7 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
     assert.ok(rms(isolated, 0.2, 4.8, 1) < 0.005, "countdown and clip offset must both delay audio");
     assert.ok(rms(isolated, 5.2, 5.8, 1) > 0.05);
 
-    const master = await render({ ...settings, resolution: "4k", quality: "lossless", format: "mov" }, 3);
+    const master = await render({ ...settings, resolution: "4k", quality: "lossless", format: "mov", view: { fillScreen: true } }, 3);
     assert.ok(rms(master, 0.2, 0.8, 0) > 0.1, "lossless video must retain the session audio");
 
     solo.tracks[1].muted = true;

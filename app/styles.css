@@ -165,6 +165,7 @@ h1 { font-size: 15px; letter-spacing: -.2px; margin: 0; font-weight: 600; }
 .session-heading span { font-size: 11px; color: var(--subtle); }
 .session-heading b { font-weight: normal; margin: 0 9px; }
 .session-heading-actions { display: flex; align-items: center; gap: 17px; }
+.fill-screen-button { width: auto; gap: 7px; padding: 0 10px; font-size: 11px; white-space: nowrap; border-color: var(--line); }
 .session-title { min-width: 0; max-width: min(480px, 45vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-title-button { display: flex; align-items: center; gap: 9px; max-width: 100%; padding: 5px 0; border: 0; border-radius: 4px; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-align: left; }
 .session-title-button span { overflow: hidden; text-overflow: ellipsis; color: inherit; font-size: inherit; }
@@ -290,6 +291,12 @@ html[data-theme="light"] .error-banner { color: #98351d; }
 .compact .track-strip { padding-top: 10px; padding-bottom: 10px; }
 .compact .track-type { margin-bottom: 11px; }
 .compact .track-bottom-row { margin-top: 11px; }
+.fill-screen { --track-height: var(--fill-track-height); }
+.fill-screen .arrangement, .fill-screen .timeline-lanes { min-height: 0; }
+.fill-screen .track-strip { flex-shrink: 0; padding-top: 10px; padding-bottom: 10px; }
+.fill-screen .track-type { margin-bottom: 11px; }
+.fill-screen .track-bottom-row { margin-top: 11px; }
+.fill-screen .sidebar-add, .fill-screen .sidebar-note, .fill-screen .timeline-add { display: none; }
 .export-dialog { color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 13px; width: min(500px, calc(100vw - 32px)); padding: 27px; box-shadow: 0 25px 100px #0007; }
 .export-dialog::backdrop { background: #0b121ab8; backdrop-filter: blur(5px); }
 .dialog-heading { display: flex; align-items: center; justify-content: space-between; }
@@ -351,6 +358,7 @@ html[data-studio-render] nextjs-portal { display: none; }
   .session-heading { padding: 17px; min-height: 74px; }
   .timeline-hint { display: none; }
   .session-heading > div:first-child { flex-direction: column; gap: 6px; align-items: flex-start; }
+  .session-heading-actions { gap: 6px; }
   .inspector { gap: 20px 25px; }
   .inspector-title { width: 100%; }
   .inspector-title span { max-width: 260px; }

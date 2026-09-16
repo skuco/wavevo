@@ -37,6 +37,7 @@ export type StudioRenderSession = {
   masterVolume: number;
   selectedId: string;
   compact: boolean;
+  fillScreen: boolean;
   loop: boolean;
   snap: boolean;
   snapInterval: number;

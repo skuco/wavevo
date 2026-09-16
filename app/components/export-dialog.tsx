@@ -8,7 +8,7 @@ import { VIDEO_RESOLUTIONS, type VideoResolution } from "@/lib/video-resolution"
 import { VIDEO_QUALITIES, type VideoQuality } from "@/lib/video-quality";
 import type { ExportSettings, SessionTrack, StudioRenderSession, VideoFormat } from "@/lib/types";
 
-type StudioView = Pick<StudioRenderSession, "selectedId" | "compact" | "loop" | "snap" | "snapInterval">;
+type StudioView = Pick<StudioRenderSession, "selectedId" | "compact" | "fillScreen" | "loop" | "snap" | "snapInterval">;
 
 export function ExportDialog({ sessionName, tracks, masterVolume, settings, onSettings, onClose, editorTheme, view }: { sessionName: string; tracks: SessionTrack[]; masterVolume: number; settings: ExportSettings; onSettings: (settings: ExportSettings) => void; onClose: () => void; editorTheme: string; view: StudioView }) {
   const ref = useRef<HTMLDialogElement>(null);

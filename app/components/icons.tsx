@@ -14,6 +14,7 @@ const paths = {
   zoomIn: "M10 6v8M6 10h8m1 5 6 6M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0",
   zoomOut: "M6 10h8m1 5 6 6M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0",
   fit: "M8 4H4v16h4M16 4h4v16h-4M8 12h8m-6-2-2 2 2 2m4-4 2 2-2 2",
+  expandVertical: "M4 3h16M4 21h16M12 6v12m-4-8 4-4 4 4m-8 4 4 4 4-4",
   wave: "M3 10v4M7 6v12M12 3v18M17 7v10M21 10v4",
   sliders: "M4 5h16M4 12h16M4 19h16M8 3v4M16 10v4M10 17v4",
   upload: "M12 16V3m-5 5 5-5 5 5M4 16v5h16v-5",

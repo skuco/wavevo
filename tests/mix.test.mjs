@@ -64,6 +64,7 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
       tracks: uploads.map((track, index) => ({ uploadId: track.id, name: index ? "Rose drums.wav" : "Teal bass.wav", color: index ? "#ed88ad" : "#18c9a7", volume: index ? 0.5 : 0.6, pan: index ? 1 : -1, start: index ? 2 : 0, muted: false, solo: false })),
       masterVolume: 0.8, showProgress: true, countdown: 0,
       waveformStyle: "wave", waveformDensity: "high", videoTheme: "dark", format: "mp4",
+      view: { selectedId: uploads[0].id },
     };
 
     const queue = async body => {
@@ -153,7 +154,7 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
       if (body.view?.fillScreen) {
         const laneBounds = [[24, 201, 167], [237, 136, 173]].map(color => {
           const rows = [];
-          for (let y = 272; y < 950; y++) {
+          for (let y = 272; y < 1040; y++) {
             let matching = 0;
             for (let x = 310; x < 465; x++) if (distance(pixel(initial, x, y), color) < 18) matching++;
             if (matching > 10) rows.push(y);
@@ -162,7 +163,7 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
         });
         assert.ok(laneBounds.every(lane => lane.height > 280), "Fill screen must expand both exported waveforms");
         assert.ok(Math.abs(laneBounds[0].height - laneBounds[1].height) <= 3, "expanded lanes must share the height equally");
-        assert.ok(laneBounds[1].bottom > 920, "expanded waveforms must reach the bottom of the editor area");
+        assert.ok(laneBounds[1].bottom > 1020, "expanded waveforms must fill the space reclaimed from editing tools");
       }
       if (body.format === "mp4") {
         const colors = [[24, 201, 167], [237, 136, 173]];
@@ -209,6 +210,7 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
     const queued = await queue(settings);
     const solo = structuredClone(settings);
     solo.tracks[1].solo = true;
+    solo.view.selectedId = "";
     solo.format = "mov"; solo.countdown = 3; solo.videoTheme = "light"; solo.resolution = "4k"; solo.quality = "balanced";
     const queuedSolo = await queue(solo);
     assert.equal((await fetch(`${origin}/`)).status, 200, "the editor remains available during rendering");
@@ -228,7 +230,7 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
     assert.ok(rms(isolated, 0.2, 4.8, 1) < 0.005, "countdown and clip offset must both delay audio");
     assert.ok(rms(isolated, 5.2, 5.8, 1) > 0.05);
 
-    const master = await render({ ...settings, resolution: "4k", quality: "lossless", format: "mov", view: { fillScreen: true } }, 3);
+    const master = await render({ ...settings, resolution: "4k", quality: "lossless", format: "mov", view: { ...settings.view, fillScreen: true } }, 3);
     assert.ok(rms(master, 0.2, 0.8, 0) > 0.1, "lossless video must retain the session audio");
 
     solo.tracks[1].muted = true;

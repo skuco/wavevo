@@ -25,7 +25,7 @@ const NO_TRACKS: SessionTrack[] = [];
 export default function Studio({ renderSession }: { renderSession?: StudioRenderSession }) {
   const [tracks, setTracks] = useState<SessionTrack[]>(renderSession?.tracks || []);
   const [sessionName, setSessionName] = useState(renderSession?.sessionName || "Untitled session");
-  const [selectedId, setSelectedId] = useState(renderSession?.selectedId || "");
+  const [selectedId, setSelectedId] = useState("");
   const [theme, setTheme] = useState(renderSession?.settings.videoTheme || "dark");
   const [renderTime, setRenderTime] = useState(-(renderSession?.settings.countdown || 0));
   const [uploading, setUploading] = useState("");
@@ -65,7 +65,9 @@ export default function Studio({ renderSession }: { renderSession?: StudioRender
       return [track.id, active && renderTime >= track.start ? track.meterPeaks[index] || 0 : 0];
     })),
   } : liveTransport;
-  const selected = tracks.find(track => track.id === selectedId) || tracks[0];
+  // Appearance editing is local UI state, never part of the rendered video.
+  const selected = renderSession ? undefined : tracks.find(track => track.id === selectedId);
+  const toggleAppearance = (id: string) => setSelectedId(previous => previous === id ? "" : id);
   const anySolo = tracks.some(track => track.solo);
   const audible = tracks.filter(track => !track.muted && (!anySolo || track.solo) && track.volume > 0);
   const timelineDuration = Math.max(30, Math.ceil(transport.duration / 5) * 5);
@@ -124,6 +126,7 @@ export default function Studio({ renderSession }: { renderSession?: StudioRender
     if (!files.length || uploadLock.current) return;
     uploadLock.current = true;
     transport.pause();
+    setSelectedId("");
     const errors: string[] = [];
     setError("");
     const available = Math.max(0, 32 - tracksRef.current.length);
@@ -140,7 +143,6 @@ export default function Studio({ renderSession }: { renderSession?: StudioRender
           const payload = await response.json();
           if (!response.ok) throw new Error(payload.error || "Upload failed.");
           setTracks(previous => [...previous, { ...payload, channelPeaks: payload.channelPeaks || [payload.peaks], color: COLORS[previous.length % COLORS.length], volume: 0.8, pan: 0, muted: false, solo: false, start: 0 }]);
-          setSelectedId(payload.id);
         } catch (caught) { errors.push(caught instanceof Error ? caught.message : "Upload failed."); }
       }
     } finally { setUploading(""); uploadLock.current = false; setError(errors.join(" ")); }
@@ -157,7 +159,7 @@ export default function Studio({ renderSession }: { renderSession?: StudioRender
       if (event.target instanceof HTMLElement && (event.target.closest("input, select, textarea, button, a, dialog") || event.target.isContentEditable)) return;
       if (event.code === "Space") { event.preventDefault(); togglePlayback(); }
       if (event.code === "Home") { event.preventDefault(); transport.seek(0); }
-      if (event.code === "Escape") stop();
+      if (event.code === "Escape") { stop(); setSelectedId(""); }
       if (event.code === "ArrowRight" || event.code === "ArrowLeft") { event.preventDefault(); transport.seek(transport.currentTime + (event.code === "ArrowRight" ? 5 : -5)); }
     };
     window.addEventListener("keydown", keydown);
@@ -181,7 +183,7 @@ export default function Studio({ renderSession }: { renderSession?: StudioRender
     transport.pause();
     const next = tracks.filter(track => track.id !== id);
     setTracks(next);
-    setSelectedId(next[0]?.id || "");
+    setSelectedId(previous => previous === id ? "" : previous);
     transport.seek(Math.min(transport.currentTime, Math.max(0, ...next.map(track => track.duration + track.start))));
   };
 
@@ -240,9 +242,9 @@ export default function Studio({ renderSession }: { renderSession?: StudioRender
           <div className="tracks-heading"><span>Tracks <b>{String(tracks.length).padStart(2, "0")}</b></span><button className="add-track-button" disabled={!!uploading || tracks.length >= 32} onClick={() => inputRef.current?.click()}><Icon name="plus" size={16} /> Add track</button></div>
           {tracks.map((track, index) => {
             const dimmed = track.muted || (anySolo && !track.solo);
-            return <div key={track.id} className={`track-strip ${selected?.id === track.id ? "selected" : ""}`} style={{ "--track-color": track.color } as CSSProperties} onClick={() => setSelectedId(track.id)}>
+            return <div key={track.id} className={`track-strip ${selected?.id === track.id ? "selected" : ""}`} style={{ "--track-color": track.color } as CSSProperties}>
               <div className="track-strip-content">
-                <div className="track-name-row"><span className="track-number">{String(index + 1).padStart(2, "0")}</span><Icon name="music" size={16} /><input aria-label={`Track ${index + 1} name`} value={trackLabel(track)} onChange={event => updateTrack(track.id, { name: event.target.value + (track.name.match(/\.[^.]+$/)?.[0] || ".wav") })} onBlur={() => { if (!trackLabel(track).trim()) updateTrack(track.id, { name: `Audio ${index + 1}.wav` }); }} /><button className="icon-button remove-track" onClick={() => removeTrack(track.id)} aria-label={`Remove ${trackLabel(track)}`} title="Remove track"><Icon name="close" size={14} /></button></div>
+                <div className="track-name-row"><span className="track-number">{String(index + 1).padStart(2, "0")}</span>{renderSession ? <Icon name="music" size={16} /> : <button className={`icon-button track-appearance-button ${selected?.id === track.id ? "active" : ""}`} aria-label={`Edit appearance: ${trackLabel(track)}`} aria-expanded={selected?.id === track.id} aria-controls="track-appearance" title="Edit appearance" onClick={() => toggleAppearance(track.id)}><Icon name="sliders" size={15} /></button>}<input aria-label={`Track ${index + 1} name`} value={trackLabel(track)} onChange={event => updateTrack(track.id, { name: event.target.value + (track.name.match(/\.[^.]+$/)?.[0] || ".wav") })} onBlur={() => { if (!trackLabel(track).trim()) updateTrack(track.id, { name: `Audio ${index + 1}.wav` }); }} /><button className="icon-button remove-track" onClick={() => removeTrack(track.id)} aria-label={`Remove ${trackLabel(track)}`} title="Remove track"><Icon name="close" size={14} /></button></div>
                 <div className="track-type"><span className="color-dot" />{track.channelPeaks?.length === 2 ? "Stereo" : "Mono"} audio<span>{formatTime(track.duration)}</span></div>
                 <div className="track-volume-row"><Icon name="speaker" size={15} /><input type="range" min="0" max="1" step="0.01" value={track.volume} aria-label={`${trackLabel(track)} volume`} onChange={event => updateTrack(track.id, { volume: Number(event.target.value) })} style={{ "--range-fill": `${track.volume * 100}%` } as CSSProperties} /><output>{db(track.volume)} <small>dB</small></output></div>
                 <div className="track-bottom-row"><label className="pan-control"><span>L</span><input type="range" min="-1" max="1" step="0.01" value={track.pan} onChange={event => updateTrack(track.id, { pan: Number(event.target.value) })} onDoubleClick={() => updateTrack(track.id, { pan: 0 })} aria-label={`${trackLabel(track)} pan`} title={`${track.pan === 0 ? "Center" : `${Math.round(Math.abs(track.pan) * 100)}% ${track.pan < 0 ? "left" : "right"}`} · Double-click to center`} /><span>R</span></label><button className={`mute-solo ${track.muted ? "muted" : ""}`} aria-label={`Mute ${trackLabel(track)}`} aria-pressed={track.muted} onClick={() => updateTrack(track.id, { muted: !track.muted })} title="Mute">M</button><button className={`mute-solo ${track.solo ? "solo" : ""}`} aria-label={`Solo ${trackLabel(track)}`} aria-pressed={track.solo} onClick={() => updateTrack(track.id, { solo: !track.solo })} title="Solo">S</button></div>
@@ -254,15 +256,18 @@ export default function Studio({ renderSession }: { renderSession?: StudioRender
           <div className="sidebar-note"><Icon name="headphones" size={16} /><span>A little space for<br />your next big sound.</span></div>
         </aside>
 
-        <div ref={viewportRef} className="timeline-viewport">
+        <div ref={viewportRef} className="timeline-viewport" onPointerDown={event => { if (event.target instanceof Element && !event.target.closest(".audio-clip, .timeline-ruler, button")) setSelectedId(""); }}>
           <div className="timeline-content" style={{ width: timelineWidth + 32, "--grid-size": `${tickStep * pixelsPerSecond}px`, "--minor-grid-size": `${tickStep * pixelsPerSecond / 5}px` } as CSSProperties}>
             <div className="timeline-ruler" role="slider" aria-label="Timeline playhead" aria-valuemin={0} aria-valuemax={transport.duration} aria-valuenow={Number(transport.currentTime.toFixed(2))} aria-valuetext={timecode(transport.currentTime)} tabIndex={0} onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); seekPointer(event); }} onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) seekPointer(event); }} onKeyDown={event => { if (event.key === "ArrowRight" || event.key === "ArrowLeft") { event.preventDefault(); event.stopPropagation(); transport.seek(transport.currentTime + (event.key === "ArrowRight" ? 1 : -1) * (snap ? snapInterval : 1)); } }}>
               {ticks.map(time => <span key={time} className="timeline-tick" style={{ left: time * pixelsPerSecond }}>{tickStep < 1 ? `${formatTime(time)}.${Math.round((time % 1) * 10)}` : formatTime(time)}</span>)}
             </div>
             <div className="timeline-lanes" onPointerDown={event => { if (event.target === event.currentTarget) seekPointer(event); }}>
               {tracks.map(track => <div key={track.id} className={`track-lane ${selected?.id === track.id ? "selected" : ""}`} onPointerDown={event => { if (event.target === event.currentTarget) seekPointer(event); }}>
-                <div className={`audio-clip ${track.muted || (anySolo && !track.solo) ? "clip-muted" : ""} ${selected?.id === track.id ? "selected" : ""}`} style={{ left: track.start * pixelsPerSecond, width: Math.max(3, track.duration * pixelsPerSecond), "--track-color": track.color } as CSSProperties} onClick={() => setSelectedId(track.id)}>
-                  <div className="clip-header" title="Drag to move track" onPointerDown={event => { event.stopPropagation(); transport.pause(); setSelectedId(track.id); event.currentTarget.setPointerCapture(event.pointerId); clipDrag.current = { id: track.id, x: event.clientX, start: track.start, scale: pixelsPerSecond }; }} onPointerMove={event => { const drag = clipDrag.current; if (!drag || drag.id !== track.id || !event.currentTarget.hasPointerCapture(event.pointerId)) return; let start = Math.max(0, Math.min(86400, drag.start + (event.clientX - drag.x) / drag.scale)); if (snap) start = Math.round(start / snapInterval) * snapInterval; updateTrack(track.id, { start: Math.round(start * 100) / 100 }); }} onPointerUp={() => { clipDrag.current = null; }} onPointerCancel={() => { clipDrag.current = null; }}><span><Icon name="wave" size={12} />{trackLabel(track)}</span><span className="clip-duration">{formatTime(track.duration)}</span></div>
+                <div className={`audio-clip ${track.muted || (anySolo && !track.solo) ? "clip-muted" : ""} ${selected?.id === track.id ? "selected" : ""}`} style={{ left: track.start * pixelsPerSecond, width: Math.max(3, track.duration * pixelsPerSecond), "--track-color": track.color } as CSSProperties}>
+                  <div className="clip-header" title="Drag to move track" onPointerDown={event => { event.stopPropagation(); transport.pause(); event.currentTarget.setPointerCapture(event.pointerId); clipDrag.current = { id: track.id, x: event.clientX, start: track.start, scale: pixelsPerSecond }; }} onPointerMove={event => { const drag = clipDrag.current; if (!drag || drag.id !== track.id || !event.currentTarget.hasPointerCapture(event.pointerId)) return; let start = Math.max(0, Math.min(86400, drag.start + (event.clientX - drag.x) / drag.scale)); if (snap) start = Math.round(start / snapInterval) * snapInterval; updateTrack(track.id, { start: Math.round(start * 100) / 100 }); }} onPointerUp={() => { clipDrag.current = null; }} onPointerCancel={() => { clipDrag.current = null; }}>
+                    <span><Icon name="wave" size={12} />{trackLabel(track)}</span>
+                    <div className="clip-header-actions"><span className="clip-duration">{formatTime(track.duration)}</span>{!renderSession && <button className="clip-appearance-button" aria-label={`Edit waveform appearance: ${trackLabel(track)}`} aria-expanded={selected?.id === track.id} aria-controls="track-appearance" title="Edit appearance" onPointerDown={event => event.stopPropagation()} onClick={() => toggleAppearance(track.id)}><Icon name="sliders" size={12} />Edit appearance</button>}</div>
+                  </div>
                   <div className="clip-body" onPointerDown={event => { event.stopPropagation(); const clip = event.currentTarget.getBoundingClientRect(); const time = track.start + (event.clientX - clip.left) / pixelsPerSecond; transport.seek(snap ? Math.round(time / snapInterval) * snapInterval : time); }}><Waveform channels={track.channelPeaks!} style={settings.waveformStyle} density={settings.waveformDensity} /></div>
                 </div>
               </div>)}
@@ -275,14 +280,14 @@ export default function Studio({ renderSession }: { renderSession?: StudioRender
         {renderSession && renderTime < 0 && <div className="render-countdown">Starting in <strong>{Math.ceil(-renderTime)}</strong></div>}
       </section>
 
-      <section className="inspector" aria-label="Waveform appearance">
-        <div className="inspector-title"><Icon name="sliders" size={17} /><div><h2>Track appearance</h2><span>{selected ? trackLabel(selected) : "Select a track to customize"}</span></div></div>
-        <div className="inspector-field color-field"><label htmlFor="track-color">Track color</label><div className="color-swatches">{COLORS.map(color => <button key={color} className={`color-swatch ${selected?.color === color ? "chosen" : ""}`} disabled={!selected} style={{ background: color }} aria-label={`Set track color ${color}`} aria-pressed={selected?.color === color} onClick={() => selected && updateTrack(selected.id, { color })}>{selected?.color === color && <Icon name="check" size={12} />}</button>)}<label className="custom-color" title="Custom track color"><input id="track-color" type="color" value={selected?.color || COLORS[0]} disabled={!selected} onChange={event => selected && updateTrack(selected.id, { color: event.target.value })} /><Icon name="plus" size={13} /></label></div></div>
+      {selected && <section id="track-appearance" className="inspector" aria-label="Waveform appearance">
+        <div className="inspector-title"><Icon name="sliders" size={17} /><div><h2>Track appearance</h2><span>{trackLabel(selected)}</span></div></div>
+        <div className="inspector-field color-field"><label htmlFor="track-color">Track color</label><div className="color-swatches">{COLORS.map(color => <button key={color} className={`color-swatch ${selected.color === color ? "chosen" : ""}`} style={{ background: color }} aria-label={`Set track color ${color}`} aria-pressed={selected.color === color} onClick={() => updateTrack(selected.id, { color })}>{selected.color === color && <Icon name="check" size={12} />}</button>)}<label className="custom-color" title="Custom track color"><input id="track-color" type="color" value={selected.color} onChange={event => updateTrack(selected.id, { color: event.target.value })} /><Icon name="plus" size={13} /></label></div></div>
         <label className="inspector-field">Waveform style · all tracks<select value={settings.waveformStyle} onChange={event => setSettings({ ...settings, waveformStyle: event.target.value as WaveformStyle })}>{Object.entries(STYLES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <label className="inspector-field density-field">Detail · all tracks<select value={settings.waveformDensity} onChange={event => setSettings({ ...settings, waveformDensity: event.target.value as WaveformDensity })}>{Object.entries(DENSITIES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        <label className="inspector-field offset-field">Start time <span className="number-input"><input type="number" min="0" max="86400" step={snap ? snapInterval : 0.1} value={selected?.start || 0} disabled={!selected} onChange={event => { transport.pause(); if (selected) updateTrack(selected.id, { start: Math.max(0, Math.min(86400, Number(event.target.value))) }); }} aria-label="Selected track start time" /><span>sec</span></span></label>
+        <label className="inspector-field offset-field">Start time <span className="number-input"><input type="number" min="0" max="86400" step={snap ? snapInterval : 0.1} value={selected.start} onChange={event => { transport.pause(); updateTrack(selected.id, { start: Math.max(0, Math.min(86400, Number(event.target.value))) }); }} aria-label="Selected track start time" /><span>sec</span></span></label>
         <div className="master-volume"><label htmlFor="master-volume"><Icon name="speaker" size={16} />Master<output>{Math.round(masterVolume * 100)}%</output></label><input id="master-volume" type="range" min="0" max="1" step="0.01" value={masterVolume} onChange={event => setMasterVolume(Number(event.target.value))} style={{ "--range-fill": `${masterVolume * 100}%` } as CSSProperties} /></div>
-      </section>
+      </section>}
 
       <footer className="status-bar"><span className="status-indicator"><i className={transport.playing ? "playing" : ""} />{uploading ? "Importing audio" : tracks.length && !transport.ready ? "Preparing playback" : renderSession && renderTime < 0 ? "Counting in" : transport.playing ? "Playing" : "Ready"}<span className="footer-separator">/</span>{audible.length} {audible.length === 1 ? "track" : "tracks"} audible</span><div className="keyboard-hints"><span><kbd>space</kbd> play / pause</span><span><kbd>←</kbd><kbd>→</kbd> seek</span></div><span className="footer-credit">Audio into motion<span>·</span><a href="https://www.testx.sk" target="_blank" rel="noreferrer">testx</a></span></footer>
       {dragging && <div className="drop-overlay"><Icon name="upload" size={40} /><h2>Add to your session</h2><p>Drop your audio files anywhere</p></div>}

@@ -9,7 +9,9 @@ export type RenderJob = {
   progress: number;
   stage: string;
   createdAt: number;
+  startedAt: number | null;
   finishedAt: number | null;
+  estimatedFinishAt: number | null;
   duration: number;
   format: VideoFormat;
   resolution: VideoResolution | null;

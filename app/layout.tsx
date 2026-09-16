@@ -3,7 +3,7 @@ import "./styles.css";
 
 export const metadata: Metadata = {
   title: "Wavevo — Multitrack audio studio",
-  description: "Bring your tracks together. Mix audio on a colorful timeline and export your sound as a waveform video.",
+  description: "Bring your tracks together. Arrange audio on a colorful timeline and export a Full HD or 4K video of your studio.",
   // Wavevo supplies both themes; keep Dark Reader from rewriting colors before hydration.
   other: { "darkreader-lock": "true" },
 };

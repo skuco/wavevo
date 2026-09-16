@@ -2,7 +2,7 @@
 
 Wavevo is a multitrack audio and video studio. Arrange WAV, MP3, and FLAC tracks on a shared timeline, balance your audio, and export a Full HD or 4K video of the full studio interface.
 
-## PoC features
+## Features
 
 - Add multiple tracks through drag-and-drop or the file picker (WAV, MP3, FLAC; maximum 200 MB each, 32 tracks per session)
 - Charcoal and light editor themes, individual track colors, and real mono/stereo waveforms
@@ -16,7 +16,7 @@ Wavevo is a multitrack audio and video studio. Arrange WAV, MP3, and FLAC tracks
 - Custom track colors
 - Rounded bars, square bars, particles, and classic wave visualization styles
 - Low, medium, and high waveform density, including smooth-to-detailed classic waves
-- Export progress indicator and optional 3, 5, or 10 second countdown
+- Moving video playhead and optional 3, 5, or 10 second countdown
 - Full HD (1920×1080) or 4K UHD (3840×2160), 30 fps MP4 or MOV with H.264/AAC
 - High quality (default), lossless RGB video masters, or balanced exports for smaller files
 - Full-interface video export using the actual app layout, icons, controls, individual track colors/names, and separate mono/stereo waveforms
@@ -57,7 +57,9 @@ The renderer connects to the local server on `PORT` (3000 by default). If your s
 
 ### Background rendering
 
-Choose **Export video → Render in background**. The API saves a snapshot of your arrangement and settings and immediately returns a queued job. The dialog closes, so playback and editing remain available. The strip under the header shows its stage and percentage; **Videos** opens the queue and completed downloads. Progress uses audio preparation stages and actual rendered frame counts, reaching 100% only after encoding and saving finish.
+Choose **Export video → Render in background**. The API saves a snapshot of your arrangement and settings and immediately returns a queued job. The dialog closes, so playback and editing remain available. The strip under the header shows its stage, percentage, elapsed time, and estimated time remaining; **Videos** opens the queue and completed downloads. Progress uses audio preparation stages and actual rendered frame counts, reaching 100% only after encoding and saving finish.
+
+Time remaining is estimated from actual frame throughput after a short initial sample and updates as rendering proceeds. Preparation shows “Estimating time”; final encoding shows “Finishing up”. Completed videos show the time from worker start to completion, excluding the queue wait. Timing is saved for new renders; older exports show “Render time not recorded”.
 
 Jobs and history are stored in `data/renders.sqlite`; videos remain in `data/uploads/<uuid>`. The worker imports videos created by the previous exporter when it starts. Rendering is sequential to limit CPU and memory pressure. Changes to the editor cannot change a submitted export. The browser may close, but the server and worker must stay running and the computer must remain awake.
 
@@ -71,15 +73,15 @@ Background jobs free the editor and avoid long HTTP requests; they do not speed 
 
 Resolution controls the pixel dimensions; **Video quality** controls compression:
 
-- **High quality** (default): H.264, CRF 10, medium preset, YUV 4:2:0. Less compression than the original export, with broad player support.
+- **High quality** (default): H.264, CRF 10, medium preset, YUV 4:2:0. Sharp detail with broad player support.
 - **Lossless master**: H.264 RGB, CRF 0. Preserves every rendered video pixel without color subsampling. Files are larger and require a player or editor that supports H.264 RGB / High 4:4:4 Predictive; many hardware decoders and browser players do not support this profile. Audio still uses AAC.
-- **Balanced**: the original H.264, CRF 18, veryfast preset, YUV 4:2:0 settings for smaller files and faster encoding.
+- **Balanced**: H.264, CRF 18, veryfast preset, YUV 4:2:0 for smaller files and faster encoding.
 
 Use 4K with High quality for everyday playback, or Lossless master to retain the exact rendered image. Compression settings cannot enlarge tiny text in a large arrangement: fitting many tracks into one frame scales down the interface. A player that scales the video to a smaller window or a service that re-encodes an upload can also affect perceived sharpness.
 
 Generated media under `data/` is intentionally ignored by Git.
 
-## PoC limitations
+## Current limitations
 
 - Files and exports live on the local filesystem and are not automatically expired yet.
 - The queue and library are shared by this local installation. There are no user accounts or per-user access controls; multi-user hosting needs authentication, storage isolation, and object storage.
@@ -88,6 +90,25 @@ Generated media under `data/` is intentionally ignored by Git.
 - Video uses a 16:9 frame at the selected Full HD or 4K resolution. Larger arrangements are scaled down to include the whole interface. 4K produces larger files and takes longer to render.
 - Rendering happens frame by frame and can take longer than the audio duration.
 - The local server must be deployed to a long-running Node environment; short-lived serverless functions are not appropriate for 200 MB uploads or video rendering.
+
+## Project structure
+
+- `app/components/`: editor, export dialog, video library, and browser hooks
+- `app/api/`: uploads, background export submission, job status, and video downloads
+- `app/studio-render/`: the isolated studio view captured by the renderer
+- `lib/server/`: audio processing, render pipeline, and SQLite job storage
+- `scripts/`: app launcher, render worker, and cleanup
+- `tests/`: queue checks and real audio/video export tests
+- `data/`: local uploads, exported videos, and render history (ignored by Git)
+
+## Cleanup
+
+```bash
+npm run clean -- --dry-run
+npm run clean
+```
+
+Cleanup removes generated test images, the TypeScript build cache, and scratch files from completed exports. It preserves uploaded audio, exported videos, render history, and active renders. Run it after tests finish; integration tests use the first-frame snapshots to verify lossless output. The active Next.js build and installed dependencies are retained.
 
 ## Checks
 

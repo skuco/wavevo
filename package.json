@@ -6,12 +6,13 @@
     "dev": "node scripts/run.mjs dev",
     "build": "next build",
     "start": "node scripts/run.mjs start",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "test:integration": "node --test tests/mix.test.mjs",
     "dev:web": "next dev",
     "start:web": "next start",
     "worker": "node --import tsx scripts/render-worker.ts",
-    "test:jobs": "node --import tsx --test tests/render-jobs.test.ts"
+    "test:jobs": "node --import tsx --test tests/render-jobs.test.ts",
+    "clean": "node scripts/clean.mjs"
   },
   "dependencies": {
     "busboy": "latest",
@@ -19,7 +20,6 @@
     "ffprobe-static": "latest",
     "next": "latest",
     "playwright-core": "^1.63.0",
-    "pngjs": "latest",
     "react": "latest",
     "react-dom": "latest",
     "tsx": "^4.23.13",
@@ -31,6 +31,7 @@
     "@types/pngjs": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "pngjs": "^7.0.0",
     "typescript": "latest"
   },
   "engines": {

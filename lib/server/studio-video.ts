@@ -35,7 +35,7 @@ function renderOrigin() {
 
 // Render the actual Studio component at each video timestamp. This keeps its
 // canvas waveforms, CSS, icons, clock, playhead, and meters identical to the app.
-export async function createStudioVideo(id: string, audioPath: string, outputPath: string, duration: number, settings: ExportSettings, format: VideoFormat, resolution: VideoResolution = "1080p", quality: VideoQuality = "high", onProgress?: (frames: number, total: number) => void, signal?: AbortSignal) {
+export async function createStudioVideo(id: string, audioPath: string, outputPath: string, duration: number, settings: ExportSettings, format: VideoFormat, resolution: VideoResolution = "1080p", quality: VideoQuality = "high", onProgress?: (frames: number, total: number, elapsedMs: number) => void, signal?: AbortSignal) {
   if (!ffmpeg) throw new Error("FFmpeg is unavailable.");
   signal?.throwIfAborted();
   const origin = renderOrigin();
@@ -79,7 +79,10 @@ export async function createStudioVideo(id: string, audioPath: string, outputPat
     // Observe early process failures while frames are still being rendered.
     void finished.catch(() => {});
     try {
-      for (let frame = 0; frame < Math.ceil(totalDuration * 30); frame++) {
+      const totalFrames = Math.ceil(totalDuration * 30);
+      const framesStartedAt = performance.now();
+      onProgress?.(0, totalFrames, 0);
+      for (let frame = 0; frame < totalFrames; frame++) {
         signal?.throwIfAborted();
         if (encoder.exitCode !== null) throw new Error(error || "Video encoder stopped unexpectedly.");
         const time = frame / 30 - settings.countdown;
@@ -90,7 +93,7 @@ export async function createStudioVideo(id: string, audioPath: string, outputPat
         const png = await page.screenshot({ type: "png", scale: "device", animations: "disabled", caret: "hide", timeout: 30000 });
         if (frame === 0) await writeFile(path.join(path.dirname(outputPath), "studio-frame.png"), png);
         await new Promise<void>((resolve, reject) => encoder.stdin.write(png, caught => caught ? reject(caught) : resolve()));
-        onProgress?.(frame + 1, Math.ceil(totalDuration * 30));
+        onProgress?.(frame + 1, totalFrames, performance.now() - framesStartedAt);
       }
       encoder.stdin.end();
       await finished;

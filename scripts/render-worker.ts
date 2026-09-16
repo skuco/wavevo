@@ -37,11 +37,14 @@ async function main() {
       }
       if (!ready) throw new Error("The local Wavevo server is unavailable. Start the app and retry this export.");
       let previous = "";
-      const bytes = await renderExport(job.id, job.settings, (value, stage) => {
+      let lastUpdate = 0;
+      const bytes = await renderExport(job.id, job.settings, (value, stage, remainingMs) => {
         controller.signal.throwIfAborted();
-        if (`${value}:${stage}` === previous) return;
+        const now = Date.now();
+        if (`${value}:${stage}` === previous && now - lastUpdate < 1000) return;
         previous = `${value}:${stage}`;
-        store.progress(job.id, owner, value, stage);
+        lastUpdate = now;
+        store.progress(job.id, owner, value, stage, remainingMs == null ? null : now + remainingMs);
       }, controller.signal);
       store.complete(job.id, owner, bytes);
       console.log(`Completed render ${job.id}`);

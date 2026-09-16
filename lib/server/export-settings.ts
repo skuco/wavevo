@@ -8,7 +8,6 @@ export const exportSchema = z.object({
     volume: z.number().min(0).max(1), pan: z.number().min(-1).max(1), start: z.number().min(0).max(86400), muted: z.boolean(), solo: z.boolean(),
   })).min(1).max(32),
   masterVolume: z.number().gt(0).max(1),
-  color: hexColor,
   showProgress: z.boolean(),
   countdown: z.union([z.literal(0), z.literal(3), z.literal(5), z.literal(10)]),
   waveformStyle: z.enum(["rounded", "square", "particles", "wave"]),

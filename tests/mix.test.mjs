@@ -62,7 +62,7 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
     }
     const settings = {
       tracks: uploads.map((track, index) => ({ uploadId: track.id, name: index ? "Rose drums.wav" : "Teal bass.wav", color: index ? "#ed88ad" : "#18c9a7", volume: index ? 0.5 : 0.6, pan: index ? 1 : -1, start: index ? 2 : 0, muted: false, solo: false })),
-      masterVolume: 0.8, color: "#18c9a7", showProgress: true, countdown: 0,
+      masterVolume: 0.8, showProgress: true, countdown: 0,
       waveformStyle: "wave", waveformDensity: "high", videoTheme: "dark", format: "mp4",
     };
 
@@ -81,6 +81,7 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
       let progress = 0;
       const deadline = Date.now() + 240000;
       const seen = new Set();
+      let sawEstimate = false;
       while (job.status !== "completed") {
         assert.notEqual(job.status, "failed", job.error || "Render failed");
         assert.ok(Date.now() < deadline, "render timed out");
@@ -90,12 +91,25 @@ test("Full HD and 4K studio videos preserve the interface, animation, and synchr
         job = (await response.json()).job;
         assert.ok(job.progress >= progress, "progress must be monotonic");
         progress = job.progress;
-        if (job.status === "running") seen.add(job.progress);
+        if (job.status === "running") {
+          seen.add(job.progress);
+          assert.ok(job.startedAt >= job.createdAt, "render time starts after queueing");
+          if (job.estimatedFinishAt !== null) {
+            sawEstimate = true;
+            assert.ok(Number.isFinite(job.estimatedFinishAt) && job.estimatedFinishAt > job.startedAt);
+          }
+        }
       }
       assert.equal(job.progress, 100);
+      assert.ok(job.finishedAt > job.startedAt && job.startedAt >= job.createdAt);
+      assert.equal(job.estimatedFinishAt, null, "completed renders no longer have an estimate");
+      assert.ok(sawEstimate, "actual frame throughput must produce a remaining-time estimate");
       assert.ok(seen.size > 1, "worker reports actual progress while rendering");
       const history = await (await fetch(`${origin}/api/render-jobs`)).json();
-      assert.equal(history.jobs.find(item => item.id === exportId)?.status, "completed");
+      const saved = history.jobs.find(item => item.id === exportId);
+      assert.equal(saved?.status, "completed");
+      assert.equal(saved?.startedAt, job.startedAt, "render start remains in saved history");
+      assert.equal(saved?.finishedAt, job.finishedAt);
       const result = job;
       const download = await fetch(`${origin}${result.downloadUrl}`);
       assert.equal(download.status, 200);
